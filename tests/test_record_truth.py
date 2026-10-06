@@ -34,6 +34,7 @@ from src.analysis.record_truth import (
     safe_corr, session_volume_profile, flatness_score, build_feature_snapshot,
     compute_flat_vol_ratio, compute_tail_gain,
     compute_big_order_stats, compute_pattern_stats,
+    _pct_rank, compute_vwap_hold_ratio, compute_weave_score, compute_pm_reversal,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -666,6 +667,192 @@ class TestQuantPct:
         # 所有指标都高 → 量化程度低
         pct = compute_quant_pct(1.5, 0.8, 0.1, 0.5)
         assert pct <= 30
+
+
+# ---------------------------------------------------------------------------
+# v2.6 新信号：双轨判定 + 行为指纹 + 指数剔除
+# ---------------------------------------------------------------------------
+
+class TestV26DualTrack:
+    def test_absolute_threshold_fallback(self):
+        # 无历史数据 → 用绝对阈值兜底，verdict_basis="绝对阈值"
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0, history_data=None)
+        assert entry is not None
+        assert entry['verdict_basis'] == '绝对阈值'
+
+    def test_relative_threshold_with_history(self):
+        # 有≥5天历史 → 用相对分位，verdict_basis="相对分位"
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        history = {
+            'cv': [1.0, 1.1, 1.2, 1.3, 1.4],
+            'corr': [0.1, 0.2, 0.3, 0.4, 0.5],
+            'tail_ratio': [0.1, 0.12, 0.14, 0.16, 0.18],
+        }
+        entry = analyze_day(bars, 'sh600519', 100.0, history_data=history)
+        assert entry is not None
+        assert entry['verdict_basis'] == '相对分位'
+
+    def test_insufficient_history_fallback(self):
+        # 历史<5天 → 仍用绝对阈值兜底
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        history = {
+            'cv': [1.0, 1.1],
+            'corr': [0.1, 0.2],
+            'tail_ratio': [0.1, 0.12],
+        }
+        entry = analyze_day(bars, 'sh600519', 100.0, history_data=history)
+        assert entry is not None
+        assert entry['verdict_basis'] == '绝对阈值'
+
+    def test_calibrated_cv_threshold(self):
+        # 校准后 CV≤0.95：构造低CV数据（量均匀）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['volume'] = 1000.0
+            b['close'] = 100 + (i % 3) * 0.01
+            b['high'] = b['close'] + 0.02
+            b['low'] = b['close'] - 0.02
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        # CV≈0 ≤ 0.95，应命中CV指标
+        assert entry['cv'] <= 0.95
+
+
+class TestV26PctRank:
+    def test_pct_rank_basic(self):
+        # 基本分位计算
+        assert _pct_rank(5, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) == 0.45
+
+    def test_pct_rank_min(self):
+        # 最小值 → 分位0
+        assert _pct_rank(1, [1, 2, 3, 4, 5]) == 0.1
+
+    def test_pct_rank_max(self):
+        # 最大值 → 分位接近1
+        assert _pct_rank(5, [1, 2, 3, 4, 5]) == 0.9
+
+    def test_pct_rank_empty(self):
+        # 空数组 → None
+        assert _pct_rank(5, []) is None
+
+    def test_pct_rank_none_value(self):
+        # None值 → None
+        assert _pct_rank(None, [1, 2, 3]) is None
+
+
+class TestV26BehaviorFingerprints:
+    def test_vwap_hold_ratio_basic(self):
+        # 基本功能：价格在VWAP上方的占比
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.1  # 持续上涨，一直在VWAP上方
+        ratio = compute_vwap_hold_ratio(bars)
+        assert ratio is not None
+        assert 0 <= ratio <= 1
+        assert ratio > 0.5  # 持续上涨应大部分在VWAP上方
+
+    def test_vwap_hold_ratio_all_below(self):
+        # 持续下跌 → 大部分在VWAP下方
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 - i * 0.1
+        ratio = compute_vwap_hold_ratio(bars)
+        assert ratio is not None
+        assert ratio < 0.5
+
+    def test_vwap_hold_ratio_empty(self):
+        # 空数据 → None
+        assert compute_vwap_hold_ratio([]) is None
+
+    def test_weave_score_basic(self):
+        # 基本功能：价格在VWAP±1.5%内的占比
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for b in bars:
+            b['close'] = 100.0  # 价格不动，完全在带宽内
+        score = compute_weave_score(bars)
+        assert score is not None
+        assert 0 <= score <= 1
+        assert score == 1.0  # 价格完全不动，织布机评分=1
+
+    def test_weave_score_volatile(self):
+        # 价格大幅波动 → 织布机评分低
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 2) * 5.0  # 大幅波动
+        score = compute_weave_score(bars)
+        assert score is not None
+        assert score < 1.0
+
+    def test_pm_reversal_morning_up_afternoon_down(self):
+        # 上午涨、下午跌 → 午后反转=1
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i < 120:  # 上午涨
+                b['close'] = 100 + i * 0.01
+            else:  # 下午跌
+                b['close'] = 101.2 - (i - 120) * 0.01
+            b['open'] = b['close']
+        reversal = compute_pm_reversal(bars)
+        assert reversal == 1
+
+    def test_pm_reversal_both_up(self):
+        # 上午涨、下午也涨 → 无反转=0
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.005
+            b['open'] = b['close']
+        reversal = compute_pm_reversal(bars)
+        assert reversal == 0
+
+    def test_pm_reversal_small_move(self):
+        # 波动太小 → None
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for b in bars:
+            b['close'] = 100.0
+            b['open'] = 100.0
+        reversal = compute_pm_reversal(bars)
+        assert reversal is None
+
+    def test_analyze_day_v26_fields(self):
+        # analyze_day 返回值包含 v2.6 字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        for field in ('vwap_hold_ratio', 'weave_score', 'pm_reversal', 'verdict_basis'):
+            assert field in entry, f'缺少字段: {field}'
+
+
+class TestV26IndexFilter:
+    def test_index_codes_constant(self):
+        # 指数代码集合包含三大指数
+        from src.analysis.record_truth import INDEX_CODES
+        assert 'sh000001' in INDEX_CODES
+        assert 'sz399001' in INDEX_CODES
+        assert 'sz399006' in INDEX_CODES
+
+    def test_calibrated_thresholds_constants(self):
+        # 校准阈值常量
+        from src.analysis.record_truth import CV_ABS_QUANT, TAIL_ABS_QUANT, CORR_ABS_QUANT
+        assert CV_ABS_QUANT == 0.95
+        assert TAIL_ABS_QUANT == 0.22
+        assert CORR_ABS_QUANT == 0.30
 
 
 if __name__ == '__main__':
