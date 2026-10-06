@@ -14,9 +14,13 @@
 from .base import BasePriceLine
 from .peak_line import PeakLine
 from .valley_line import ValleyLine
+from .balance_line import BalanceLine
+from .slant_line import SlantLine
 
 __all__ = [
     "BasePriceLine",
     "PeakLine",
     "ValleyLine",
+    "BalanceLine",
+    "SlantLine",
 ]
