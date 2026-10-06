@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v3.2（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.3（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -163,6 +163,23 @@ v3.2 相对 v3.1 的变更（VWAP深入应用——斜率+标准差带，5个新
            'below_2σ' / 'between_neg2_neg1' / 'between_neg1_0' /
            'between_0_pos1' / 'between_pos1_pos2' / 'above_2σ'。
     设计原则：全部只记录不入投票，深入挖掘VWAP这一机构核心指标。
+
+v3.3 相对 v3.2 的变更（开盘5分钟/尾盘5分钟独立特征——时段博弈，7个新字段）：
+    [新增] open_5min_return        开盘5分钟涨跌幅（%）= (第5分钟收盘/开盘价-1)×100。
+           早盘博弈的方向强度。
+    [新增] open_5min_volume_ratio   开盘5分钟量占比 = 前5分钟成交量/全天成交量。
+           早盘放量程度。
+    [新增] close_5min_return        尾盘5分钟涨跌幅（%）= (收盘价/倒数第5分钟收盘-1)×100。
+           尾盘博弈的方向强度。
+    [新增] close_5min_volume_ratio  尾盘5分钟量占比 = 最后5分钟成交量/全天成交量。
+           尾盘放量程度。
+    [新增] close_5min_pull_or_push  尾盘拉升/打压方向：'pull'（拉升，return>0.1%）/
+           'push'（打压，return<-0.1%）/ 'flat'（|return|≤0.1%）。
+    [新增] open_close_return_diff    开盘vs尾盘涨跌幅差 = open_5min_return - close_5min_return。
+           早盘强尾盘弱=正值（冲高回落），早盘弱尾盘强=负值（探底回升）。
+    [新增] open_close_volume_ratio   开盘5分钟量/尾盘5分钟量。
+           >1=早盘放量更甚，<1=尾盘放量更甚。
+    设计原则：全部只记录不入投票，从"时段博弈"维度榨干1分钟数据。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -1009,6 +1026,9 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     vwap_slope_result = compute_vwap_slope(bars, volumes)
     vwap_std_result = compute_vwap_std_band(bars, volumes)
 
+    # --- v3.3 新增：开盘5分钟/尾盘5分钟独立特征——时段博弈 ---
+    open_close_5min = compute_open_close_5min(bars, volumes)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1122,6 +1142,14 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'vwap_std': vwap_std_result[0],
         'price_vwap_zscore': vwap_std_result[1],
         'vwap_band_position': vwap_std_result[2],
+        # --- v3.3 新增：开盘5分钟/尾盘5分钟独立特征——时段博弈 ---
+        'open_5min_return': open_close_5min['open_5min_return'] if open_close_5min else None,
+        'open_5min_volume_ratio': open_close_5min['open_5min_volume_ratio'] if open_close_5min else None,
+        'close_5min_return': open_close_5min['close_5min_return'] if open_close_5min else None,
+        'close_5min_volume_ratio': open_close_5min['close_5min_volume_ratio'] if open_close_5min else None,
+        'close_5min_pull_or_push': open_close_5min['close_5min_pull_or_push'] if open_close_5min else None,
+        'open_close_return_diff': open_close_5min['open_close_return_diff'] if open_close_5min else None,
+        'open_close_volume_ratio': open_close_5min['open_close_volume_ratio'] if open_close_5min else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1369,6 +1397,24 @@ def print_summary(stats: dict):
         print('  收盘VWAP标准差带位置:')
         for bp, cnt in sorted(vbp_counts.items(), key=lambda x: -x[1]):
             print(f'    {bp:22s}: {cnt:5d}  ({cnt / n:6.1%})')
+    # --- v3.3 开盘5分钟/尾盘5分钟 均值 ---
+    if stats.get('o5r_n'):
+        print(f'  开盘5分钟: 涨跌={stats["o5r_sum"] / stats["o5r_n"]:+.4f}%, '
+              f'量占比={stats["o5vr_sum"] / stats["o5vr_n"]:.1%}')
+    if stats.get('c5r_n'):
+        print(f'  尾盘5分钟: 涨跌={stats["c5r_sum"] / stats["c5r_n"]:+.4f}%, '
+              f'量占比={stats["c5vr_sum"] / stats["c5vr_n"]:.1%}')
+    c5pp_counts = stats.get('c5pp_counts', {})
+    if c5pp_counts:
+        print('  尾盘拉升/打压:')
+        for d, cnt in sorted(c5pp_counts.items(), key=lambda x: -x[1]):
+            print(f'    {d:6s}: {cnt:5d}  ({cnt / n:6.1%})')
+    if stats.get('ocrd_n'):
+        print(f'  开盘vs尾盘涨跌差={stats["ocrd_sum"] / stats["ocrd_n"]:+.4f}% '
+              f'(正=冲高回落, 负=探底回升)')
+    if stats.get('ocvr_n'):
+        print(f'  开盘/尾盘量比={stats["ocvr_sum"] / stats["ocvr_n"]:.3f} '
+              f'(>1早盘放量更甚, <1尾盘放量更甚)')
     print(f'{line}\n')
 
 
@@ -1593,6 +1639,19 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         vbp = entry.get('vwap_band_position')
         if vbp:
             stats['vbp_counts'][vbp] = stats['vbp_counts'].get(vbp, 0) + 1
+        # v3.3 开盘5分钟/尾盘5分钟 累加
+        for k, v in (('o5r', entry.get('open_5min_return')),
+                     ('o5vr', entry.get('open_5min_volume_ratio')),
+                     ('c5r', entry.get('close_5min_return')),
+                     ('c5vr', entry.get('close_5min_volume_ratio')),
+                     ('ocrd', entry.get('open_close_return_diff')),
+                     ('ocvr', entry.get('open_close_volume_ratio'))):
+            if v is not None:
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
+        c5pp = entry.get('close_5min_pull_or_push')
+        if c5pp:
+            stats['c5pp_counts'][c5pp] = stats['c5pp_counts'].get(c5pp, 0) + 1
 
     return entries
 
@@ -2193,6 +2252,67 @@ def compute_vwap_std_band(bars, volumes):
     return (round(vwap_std, 4), zscore, band)
 
 
+# ---------------------------------------------------------------------------
+# v3.3 新增：开盘5分钟/尾盘5分钟独立特征——时段博弈
+# ---------------------------------------------------------------------------
+
+OPEN_CLOSE_THRESHOLD = 0.1  # 尾盘拉升/打压判定阈值（%）
+
+
+def compute_open_close_5min(bars, volumes):
+    """v3.3 开盘5分钟/尾盘5分钟独立特征。
+    返回字典包含：open_5min_return, open_5min_volume_ratio,
+    close_5min_return, close_5min_volume_ratio, close_5min_pull_or_push,
+    open_close_return_diff, open_close_volume_ratio。
+    """
+    if not bars or not volumes or len(bars) < 10 or sum(volumes) <= 0:
+        return None
+
+    closes = [b['close'] for b in bars]
+    open_price = bars[0].get('open', closes[0])
+    total_volume = sum(volumes)
+
+    # 开盘5分钟（前5根K线）
+    open_5min_close = closes[4] if len(closes) > 4 else closes[-1]
+    open_5min_volume = sum(volumes[:5])
+    open_5min_return = round((open_5min_close / open_price - 1) * 100, 4) if open_price > 0 else None
+    open_5min_volume_ratio = round(open_5min_volume / total_volume, 4) if total_volume > 0 else None
+
+    # 尾盘5分钟（最后5根K线）
+    close_5min_start = closes[-5] if len(closes) >= 5 else closes[0]
+    close_price = closes[-1]
+    close_5min_volume = sum(volumes[-5:])
+    close_5min_return = round((close_price / close_5min_start - 1) * 100, 4) if close_5min_start > 0 else None
+    close_5min_volume_ratio = round(close_5min_volume / total_volume, 4) if total_volume > 0 else None
+
+    # 尾盘拉升/打压方向
+    if close_5min_return is not None:
+        if close_5min_return > OPEN_CLOSE_THRESHOLD:
+            pull_or_push = 'pull'  # 尾盘拉升
+        elif close_5min_return < -OPEN_CLOSE_THRESHOLD:
+            pull_or_push = 'push'  # 尾盘打压
+        else:
+            pull_or_push = 'flat'
+    else:
+        pull_or_push = None
+
+    # 开盘vs尾盘对比
+    open_close_return_diff = round(open_5min_return - close_5min_return, 4) if (
+        open_5min_return is not None and close_5min_return is not None) else None
+    open_close_volume_ratio = round(open_5min_volume / close_5min_volume, 4) if (
+        close_5min_volume > 0) else None
+
+    return {
+        'open_5min_return': open_5min_return,
+        'open_5min_volume_ratio': open_5min_volume_ratio,
+        'close_5min_return': close_5min_return,
+        'close_5min_volume_ratio': close_5min_volume_ratio,
+        'close_5min_pull_or_push': pull_or_push,
+        'open_close_return_diff': open_close_return_diff,
+        'open_close_volume_ratio': open_close_volume_ratio,
+    }
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -2278,7 +2398,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.2（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.3（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -2317,12 +2437,17 @@ def main():
         'civa_sum', 'civa_n', 'hvn_sum', 'hvn_n', 'lvn_sum', 'lvn_n',
         # v3.2 新增：VWAP斜率+标准差带
         'vs_sum', 'vs_n', 'vstd_sum', 'vstd_n', 'pvz_sum', 'pvz_n',
+        # v3.3 新增：开盘5分钟/尾盘5分钟
+        'o5r_sum', 'o5r_n', 'o5vr_sum', 'o5vr_n',
+        'c5r_sum', 'c5r_n', 'c5vr_sum', 'c5vr_n',
+        'ocrd_sum', 'ocrd_n', 'ocvr_sum', 'ocvr_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
     stats['pvd_counts'] = {}      # v2.8 量价背离分布统计
     stats['vsd_counts'] = {}      # v3.2 VWAP斜率方向分布统计
     stats['vbp_counts'] = {}      # v3.2 VWAP标准差带位置分布统计
+    stats['c5pp_counts'] = {}     # v3.3 尾盘拉升/打压分布统计
 
     kline_1min_dir = min1_dir()  # 经目录宪法
     if not kline_1min_dir.exists():

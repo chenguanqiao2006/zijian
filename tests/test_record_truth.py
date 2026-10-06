@@ -45,6 +45,7 @@ from src.analysis.record_truth import (
     compute_max_consecutive, compute_volume_price_quadrants,
     compute_volume_profile,
     compute_vwap_slope, compute_vwap_std_band,
+    compute_open_close_5min,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1506,6 +1507,122 @@ class TestV32VWAPDeep:
             'price_vwap_zscore', 'vwap_band_position',
         )
         for field in v32_fields:
+            assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v3.3 新信号：开盘5分钟/尾盘5分钟独立特征——时段博弈
+# ---------------------------------------------------------------------------
+
+class TestV33OpenClose5min:
+    def test_open_5min_return_positive(self):
+        # 开盘5分钟上涨
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        bars[0]['open'] = 100.0
+        for i in range(5):
+            bars[i]['close'] = 100 + (i + 1) * 0.5  # 前5分钟持续上涨
+            bars[i]['volume'] = volumes[i]
+        for i in range(5, 100):
+            bars[i]['close'] = 102.5
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['open_5min_return'] > 0
+
+    def test_close_5min_pull(self):
+        # 尾盘拉升
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i in range(95):
+            bars[i]['close'] = 100.0
+            bars[i]['volume'] = volumes[i]
+        for i in range(95, 100):
+            bars[i]['close'] = 100 + (i - 94) * 0.5  # 最后5分钟持续上涨
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['close_5min_return'] > 0
+        assert result['close_5min_pull_or_push'] == 'pull'
+
+    def test_close_5min_push(self):
+        # 尾盘打压
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i in range(95):
+            bars[i]['close'] = 100.0
+            bars[i]['volume'] = volumes[i]
+        for i in range(95, 100):
+            bars[i]['close'] = 100 - (i - 94) * 0.5  # 最后5分钟持续下跌
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['close_5min_return'] < 0
+        assert result['close_5min_pull_or_push'] == 'push'
+
+    def test_open_5min_volume_ratio(self):
+        # 开盘5分钟量占比：早盘放量时占比高
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [100.0] * 100
+        for i in range(5):
+            volumes[i] = 5000.0  # 前5分钟巨量
+            bars[i]['volume'] = volumes[i]
+        for i in range(5, 100):
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['open_5min_volume_ratio'] > 0.2  # 早盘量占比>20%
+
+    def test_open_close_return_diff_high_open_low_close(self):
+        # 冲高回落：开盘涨，尾盘跌 → 涨跌差为正
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        bars[0]['open'] = 100.0
+        for i in range(5):
+            bars[i]['close'] = 100 + (i + 1) * 0.5  # 开盘上涨
+            bars[i]['volume'] = volumes[i]
+        for i in range(5, 95):
+            bars[i]['close'] = 102.5
+            bars[i]['volume'] = volumes[i]
+        for i in range(95, 100):
+            bars[i]['close'] = 102.5 - (i - 94) * 0.5  # 尾盘下跌
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['open_close_return_diff'] > 0  # 冲高回落
+
+    def test_open_close_volume_ratio(self):
+        # 开盘/尾盘量比：早盘放量时比值大
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [100.0] * 100
+        for i in range(5):
+            volumes[i] = 5000.0  # 前5分钟巨量
+            bars[i]['volume'] = volumes[i]
+        for i in range(95, 100):
+            volumes[i] = 100.0  # 尾盘正常量
+            bars[i]['volume'] = volumes[i]
+        for i in range(5, 95):
+            bars[i]['volume'] = volumes[i]
+        result = compute_open_close_5min(bars, volumes)
+        assert result is not None
+        assert result['open_close_volume_ratio'] > 5  # 开盘量是尾盘的5倍以上
+
+    def test_analyze_day_v33_fields(self):
+        # analyze_day 返回值包含 v3.3 字段（7个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        v33_fields = (
+            'open_5min_return', 'open_5min_volume_ratio',
+            'close_5min_return', 'close_5min_volume_ratio',
+            'close_5min_pull_or_push', 'open_close_return_diff',
+            'open_close_volume_ratio',
+        )
+        for field in v33_fields:
             assert field in entry, f'缺少字段: {field}'
 
 
