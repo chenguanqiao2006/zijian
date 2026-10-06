@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+tests/test_record_truth.py — 真假量柱账本分析器测试
+====================================================
+
+覆盖：
+    1. 核心指标计算（CV / corr / tail_ratio / flatness）
+    2. v2.3 新信号（flat_vol_ratio / tail_gain / zero_vol_mins）
+    3. 涨跌停/一字板检测
+    4. 判定逻辑（真金白银 / 疑似量化 / 量化对倒）
+    5. 数据解析（兼容字符串/数组/字典三种格式）
+    6. filter_session（连续竞价时段过滤）
+    7. LedgerCache（账本读写+验证）
+    8. 北交所过滤
+    9. 端到端（Mock 数据 → analyze_day → 判定结果）
+"""
+
+import json
+import math
+import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.analysis.record_truth import (
+    is_bj, limit_pct_for, min_bars_for,
+    extract_bars_payload, normalize_bar, extract_date,
+    filter_session, load_and_group_days,
+    safe_corr, session_volume_profile, flatness_score, build_feature_snapshot,
+    compute_flat_vol_ratio, compute_tail_gain,
+    detect_limit_status, compute_quant_pct, analyze_day,
+    LedgerCache,
+)
+
+
+# ---------------------------------------------------------------------------
+# 辅助：构造 Mock 1分钟K线
+# ---------------------------------------------------------------------------
+
+def make_bars(n=240, price=100.0, vol=1000.0, start_time='2026-09-30 09:30'):
+    """构造 n 根均匀的1分钟K线（价格恒定、量能恒定）。"""
+    bars = []
+    h, m = 9, 30
+    for i in range(n):
+        time_str = f'2026-09-30 {h:02d}:{m:02d}'
+        bars.append({
+            'time': time_str,
+            'open': price,
+            'high': price,
+            'low': price,
+            'close': price,
+            'volume': vol,
+        })
+        m += 1
+        if m == 60:
+            m = 0
+            h += 1
+        if h == 12 and m > 0:
+            h, m = 13, 0
+        if h == 15 and m > 0:
+            break
+    return bars
+
+
+# ---------------------------------------------------------------------------
+# 北交所过滤
+# ---------------------------------------------------------------------------
+
+class TestIsBJ:
+    def test_bj_prefix(self):
+        assert is_bj('bj430047') is True
+
+    def test_sh_normal(self):
+        assert is_bj('sh600519') is False
+
+    def test_sz_normal(self):
+        assert is_bj('sz000688') is False
+
+    def test_83_prefix(self):
+        assert is_bj('sh830001') is True
+
+    def test_empty(self):
+        assert is_bj('') is False
+
+
+# ---------------------------------------------------------------------------
+# 涨跌停规则
+# ---------------------------------------------------------------------------
+
+class TestLimitPct:
+    def test_main_board(self):
+        assert limit_pct_for('sh600519') == 0.098
+
+    def test_gem(self):
+        assert limit_pct_for('sz300750') == 0.198
+
+    def test_star(self):
+        assert limit_pct_for('sh688981') == 0.198
+
+    def test_min_bars(self):
+        assert min_bars_for('sh600519') == 230
+
+
+# ---------------------------------------------------------------------------
+# 数据解析
+# ---------------------------------------------------------------------------
+
+class TestDataParsing:
+    def test_extract_list(self):
+        payload = [['2026-09-30 09:30', 100, 101, 99, 100.5, 1000]]
+        assert extract_bars_payload(payload) == payload
+
+    def test_extract_dict_bars(self):
+        obj = {'bars': [['2026-09-30', 100, 101, 99, 100.5, 1000]]}
+        assert extract_bars_payload(obj) == obj['bars']
+
+    def test_extract_dict_klines(self):
+        obj = {'data': {'klines': ['2026-09-30,100,101,99,100.5,1000']}}
+        result = extract_bars_payload(obj)
+        assert result == ['2026-09-30,100,101,99,100.5,1000']
+
+    def test_normalize_array(self):
+        bar = normalize_bar(['2026-09-30 09:30', 100, 101, 99, 100.5, 1000])
+        assert bar['open'] == 100
+        assert bar['high'] == 101
+        assert bar['volume'] == 1000
+
+    def test_normalize_string(self):
+        bar = normalize_bar('2026-09-30 09:30,100,101,99,100.5,1000')
+        assert bar['close'] == 100.5
+
+    def test_normalize_dict(self):
+        bar = normalize_bar({'time': '2026-09-30', 'open': 100, 'high': 101,
+                              'low': 99, 'close': 100.5, 'volume': 1000})
+        assert bar['time'] == '2026-09-30'
+
+    def test_extract_date_standard(self):
+        assert extract_date('2026-09-30 09:30') == '2026-09-30'
+
+    def test_extract_date_slash(self):
+        assert extract_date('2026/09/30') == '2026-09-30'
+
+    def test_extract_date_none(self):
+        assert extract_date(None) is None
+
+
+# ---------------------------------------------------------------------------
+# filter_session
+# ---------------------------------------------------------------------------
+
+class TestFilterSession:
+    def test_keeps_trading_hours(self):
+        bars = [
+            {'time': '2026-09-30 09:30', 'volume': 100},
+            {'time': '2026-09-30 10:00', 'volume': 100},
+            {'time': '2026-09-30 11:30', 'volume': 100},
+            {'time': '2026-09-30 13:00', 'volume': 100},
+            {'time': '2026-09-30 15:00', 'volume': 100},
+        ]
+        result = filter_session(bars)
+        assert len(result) == 5
+
+    def test_filters_lunch_break(self):
+        bars = [
+            {'time': '2026-09-30 11:30', 'volume': 100},
+            {'time': '2026-09-30 12:00', 'volume': 100},  # 午休
+            {'time': '2026-09-30 12:30', 'volume': 100},  # 午休
+            {'time': '2026-09-30 13:00', 'volume': 100},
+        ]
+        result = filter_session(bars)
+        assert len(result) == 2
+
+    def test_cuts_tail_zero_vol(self):
+        bars = [
+            {'time': '2026-09-30 14:55', 'volume': 100},
+            {'time': '2026-09-30 14:56', 'volume': 0},
+            {'time': '2026-09-30 14:57', 'volume': 0},
+            {'time': '2026-09-30 14:58', 'volume': 0},
+        ]
+        result = filter_session(bars)
+        assert len(result) == 1
+        assert result[0]['time'] == '2026-09-30 14:55'
+
+
+# ---------------------------------------------------------------------------
+# 指标计算
+# ---------------------------------------------------------------------------
+
+class TestIndicators:
+    def test_safe_corr_perfect(self):
+        # 完全正相关
+        r = safe_corr([1, 2, 3], [1, 2, 3])
+        assert abs(r - 1.0) < 0.001
+
+    def test_safe_corr_negative(self):
+        r = safe_corr([1, 2, 3], [3, 2, 1])
+        assert abs(r + 1.0) < 0.001
+
+    def test_safe_corr_none_too_few(self):
+        assert safe_corr([1], [1]) is None
+
+    def test_session_volume_profile(self):
+        # 均匀分布：6个时段根数分别为30/60/30/60/30/30，占比各为 根数/240
+        vols = [100] * 240
+        profile = session_volume_profile(vols)
+        assert profile is not None
+        assert len(profile) == 6
+        expected = [30/240, 60/240, 30/240, 60/240, 30/240, 30/240]
+        for p, e in zip(profile, expected):
+            assert abs(p - e) < 0.001
+        assert abs(sum(profile) - 1.0) < 0.001
+
+    def test_flatness_score_uniform(self):
+        # 完全均匀 → flatness=0
+        profile = [1.0 / 6] * 6
+        assert flatness_score(profile) == 0
+
+    def test_build_feature_snapshot(self):
+        vols = [100] * 240
+        snap = build_feature_snapshot(vols)
+        assert snap is not None
+        assert len(snap) == 24
+        for s in snap:
+            assert abs(s - 1.0 / 24) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# v2.3 新信号
+# ---------------------------------------------------------------------------
+
+class TestV23Signals:
+    def test_flat_vol_ratio_no_flat(self):
+        # 价格波动大，无平价放量
+        bars = [{'open': 100, 'close': 101} for _ in range(10)]
+        vols = [2000] * 10  # 放量但价格不平
+        ratio = compute_flat_vol_ratio(bars, vols, 1000)
+        assert ratio == 0
+
+    def test_flat_vol_ratio_with_flat(self):
+        # 价格平 + 放量
+        bars = [{'open': 100.00, 'close': 100.00} for _ in range(5)]
+        vols = [3000] * 5  # 3倍均量
+        ratio = compute_flat_vol_ratio(bars, vols, 1000)
+        assert ratio == 1.0
+
+    def test_tail_gain_positive(self):
+        bars = make_bars(n=31, price=100.0)
+        bars[-1]['close'] = 102.0  # 尾盘涨2%
+        gain = compute_tail_gain(bars)
+        assert gain is not None
+        assert abs(gain - 0.02) < 0.001
+
+    def test_tail_gain_too_few_bars(self):
+        bars = make_bars(n=10)
+        assert compute_tail_gain(bars) is None
+
+    def test_zero_vol_mins(self):
+        bars = make_bars(n=10, vol=1000)
+        vols = [1000, 0, 1000, 0, 1000, 1000, 0, 1000, 1000, 1000]
+        zero_count = sum(1 for v in vols if v <= 0)
+        assert zero_count == 3
+
+
+# ---------------------------------------------------------------------------
+# 涨跌停检测
+# ---------------------------------------------------------------------------
+
+class TestLimitStatus:
+    def test_one_word_board(self):
+        bars = [{'open': 10, 'high': 10, 'low': 10, 'close': 10}]
+        result = detect_limit_status(bars, 9.09, 0.098)
+        assert result == 'one_word'
+
+    def test_limit_up(self):
+        bars = [{'open': 10, 'high': 11, 'low': 10, 'close': 11}]
+        result = detect_limit_status(bars, 10.0, 0.098)
+        assert result == 'limit_up'
+
+    def test_limit_down(self):
+        bars = [{'open': 9, 'high': 9, 'low': 8.5, 'close': 9}]
+        result = detect_limit_status(bars, 10.0, 0.098)
+        assert result == 'limit_down'
+
+    def test_no_limit(self):
+        bars = [{'open': 10, 'high': 10.5, 'low': 9.8, 'close': 10.2}]
+        result = detect_limit_status(bars, 10.0, 0.098)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 判定逻辑
+# ---------------------------------------------------------------------------
+
+class TestVerdict:
+    def test_real_money(self):
+        # 构造0命中：cv高(量能波动大) + corr高(量价正相关) + 尾盘不集中 + 分布不均
+        bars = []
+        for i in range(240):
+            # 量能大幅波动（奇数根放量，偶数根缩量）→ cv高
+            vol = 5000 if i % 2 == 0 else 100
+            # 价格与量能正相关 → corr高
+            price = 100 + (vol / 5000.0) * 0.5
+            hh = 9 + (i * 60 + 570) // 3600  # 交易时段小时
+            mm = (i * 60 + 570) % 3600 // 60
+            if hh >= 12 and mm > 0:
+                hh, mm = 13, (mm - 60) if mm >= 60 else mm
+            bars.append({
+                'time': f'2026-09-30 {hh:02d}:{mm:02d}',
+                'open': price, 'high': price + 0.05, 'low': price - 0.05,
+                'close': price + 0.02, 'volume': vol,
+            })
+        entry = analyze_day(bars, 'sh600519', 99.0)
+        assert entry is not None
+        # 0命中 → 真金白银
+        assert entry['is_real'] is True
+        assert entry['verdict'] == '真金白银'
+
+    def test_quant_manipulation(self):
+        # 构造≥2命中：cv低(均匀) + 尾盘集中 + 分布均匀
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        # 价格小幅波动（避免一字板），但价格变化与量能无关
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 7) * 0.01
+            b['high'] = b['close'] + 0.02
+            b['low'] = b['close'] - 0.02
+        # 尾盘30根大幅放量 → tail_ratio命中
+        for i in range(210, 240):
+            bars[i]['volume'] = 8000
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        # cv低(命中) + tail_ratio高(命中) → 至少2命中 → 量化对倒
+        assert entry['is_real'] is False
+        assert entry['verdict'] == '量化对倒'
+
+    def test_limit_exempt(self):
+        # 一字板（至少2根，high==low）→ 豁免
+        bars = [
+            {'time': '2026-09-30 09:30', 'open': 10, 'high': 10, 'low': 10,
+             'close': 10, 'volume': 1000},
+            {'time': '2026-09-30 09:31', 'open': 10, 'high': 10, 'low': 10,
+             'close': 10, 'volume': 2000},
+        ]
+        entry = analyze_day(bars, 'sh600519', 9.09)
+        assert entry is not None
+        assert entry['limit_status'] == 'one_word'
+        assert '豁免' in entry['verdict']
+
+    def test_v23_fields_present(self):
+        # 验证 v2.3 新字段都存在（价格有波动，避免一字板）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        assert 'flat_vol_ratio' in entry
+        assert 'tail_gain' in entry
+        assert 'zero_vol_mins' in entry
+        assert 'vprofile_24' in entry
+        assert entry['flat_vol_ratio'] is not None
+        assert entry['tail_gain'] is not None
+
+
+# ---------------------------------------------------------------------------
+# LedgerCache
+# ---------------------------------------------------------------------------
+
+class TestLedgerCache:
+    def test_put_and_has(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = LedgerCache(Path(tmp))
+            entry = {'verdict': '真金白银', 'is_real': True}
+            ledger.put('2026-09', 'sh600519', '2026-09-30', entry)
+            assert ledger.has('2026-09', 'sh600519', '2026-09-30')
+            assert not ledger.has('2026-09', 'sh600519', '2026-09-29')
+
+    def test_flush_and_verify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = LedgerCache(Path(tmp))
+            entry = {'verdict': '真金白银', 'is_real': True}
+            ledger.put('2026-09', 'sh600519', '2026-09-30', entry)
+            ledger.flush()
+            assert ledger.verify([('2026-09', 'sh600519', '2026-09-30')])
+            assert not ledger.verify([('2026-09', 'sh600519', '2026-09-29')])
+
+    def test_flush_creates_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = LedgerCache(Path(tmp))
+            ledger.put('2026-09', 'sh600519', '2026-09-30', {'v': 1})
+            ledger.flush()
+            assert (Path(tmp) / '2026-09.json').exists()
+
+
+# ---------------------------------------------------------------------------
+# compute_quant_pct
+# ---------------------------------------------------------------------------
+
+class TestQuantPct:
+    def test_all_low(self):
+        # 所有指标都低 → 量化程度高
+        pct = compute_quant_pct(0.3, 0.1, 0.5, 0.1)
+        assert pct >= 50
+
+    def test_all_high(self):
+        # 所有指标都高 → 量化程度低
+        pct = compute_quant_pct(1.5, 0.8, 0.1, 0.5)
+        assert pct <= 30
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v', '--tb=short'])
