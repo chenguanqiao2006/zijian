@@ -43,6 +43,7 @@ from src.analysis.record_truth import (
     compute_return_skewness, compute_return_kurtosis, compute_downside_vol_ratio,
     compute_vwap_cross_count, compute_price_path_efficiency,
     compute_max_consecutive, compute_volume_price_quadrants,
+    compute_volume_profile,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1307,6 +1308,108 @@ class TestV30Milestone:
             'vol_up_price_down_minutes', 'vol_down_price_down_minutes',
         )
         for field in v30_fields:
+            assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v3.1 新信号：Volume Profile——从价格维度看量分布
+# ---------------------------------------------------------------------------
+
+class TestV31VolumeProfile:
+    def test_volume_profile_basic(self):
+        # 基本功能：返回字典包含8个字段
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 10 - 5) * 0.5
+            b['high'] = b['close'] + 1.0
+            b['low'] = b['close'] - 1.0
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is not None
+        for field in ('poc_price', 'value_area_high', 'value_area_low',
+                      'value_area_width', 'close_in_value_area',
+                      'poc_volume_ratio', 'high_volume_nodes', 'low_volume_nodes'):
+            assert field in vp, f'缺少字段: {field}'
+
+    def test_volume_profile_poc_in_range(self):
+        # POC价格在全天价格范围内
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 10 - 5) * 0.5
+            b['high'] = b['close'] + 1.0
+            b['low'] = b['close'] - 1.0
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is not None
+        day_high = max(b['high'] for b in bars)
+        day_low = min(b['low'] for b in bars)
+        assert day_low <= vp['poc_price'] <= day_high
+
+    def test_volume_profile_value_area(self):
+        # 价值区间：VAH >= VAL，宽度>0
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 10 - 5) * 0.5
+            b['high'] = b['close'] + 1.0
+            b['low'] = b['close'] - 1.0
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is not None
+        assert vp['value_area_high'] >= vp['value_area_low']
+        assert vp['value_area_width'] > 0
+
+    def test_volume_profile_concentrated(self):
+        # 量能集中在单一价位：POC量占比高
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [100.0] * 100
+        # 让50根bar的收盘价都在100附近，且量很大
+        for i in range(50):
+            bars[i]['close'] = 100.0
+            bars[i]['high'] = 100.5
+            bars[i]['low'] = 99.5
+            volumes[i] = 5000.0  # 大量
+        for i in range(50, 100):
+            bars[i]['close'] = 105.0 + (i - 50) * 0.1
+            bars[i]['high'] = bars[i]['close'] + 0.5
+            bars[i]['low'] = bars[i]['close'] - 0.5
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is not None
+        assert vp['poc_volume_ratio'] > 0.2  # POC量占比>20%（集中）
+
+    def test_volume_profile_wide_range(self):
+        # 价格波动大：价值区间宽度大
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 20 - 10) * 2.0  # 大幅波动
+            b['high'] = b['close'] + 2.0
+            b['low'] = b['close'] - 2.0
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is not None
+        assert vp['value_area_width'] > 5  # 宽度大
+
+    def test_volume_profile_insufficient_data(self):
+        # 数据不足：返回None
+        bars = make_bars(n=5, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 5
+        vp = compute_volume_profile(bars, volumes)
+        assert vp is None
+
+    def test_analyze_day_v31_fields(self):
+        # analyze_day 返回值包含 v3.1 字段（8个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        v31_fields = (
+            'poc_price', 'value_area_high', 'value_area_low', 'value_area_width',
+            'close_in_value_area', 'poc_volume_ratio',
+            'high_volume_nodes', 'low_volume_nodes',
+        )
+        for field in v31_fields:
             assert field in entry, f'缺少字段: {field}'
 
 

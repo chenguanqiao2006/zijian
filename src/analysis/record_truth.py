@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v3.0（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.1（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -133,6 +133,22 @@ v3.0 相对 v2.9 的变更（里程碑版本——8个信号12个字段，含国
     设计原则：全部只记录不入投票，榨干1分钟数据的每一滴信息。
     特别说明：偏度/峰度/下行波动率占比三个因子经国泰君安2023年11月金工研报
     《基于分钟数据的高频因子选股效果研究》验证，在5个指数成分股内都被选用。
+
+v3.1 相对 v3.0 的变更（Volume Profile——从价格维度看量分布，8个新字段）：
+    [新增] poc_price              POC（Point of Control）：成交量最大的价格位。
+           机构标配指标，代表当日"主战场"/"控盘价"。
+    [新增] value_area_high        VAH（Value Area High）：价值区间高点。
+           包含70%成交量的价格区间的上沿。
+    [新增] value_area_low         VAL（Value Area Low）：价值区间低点。
+           包含70%成交量的价格区间的下沿。
+    [新增] value_area_width       价值区间宽度 = VAH - VAL。衡量当日成交价格的分散程度。
+    [新增] close_in_value_area    收盘价是否在价值区间内（True/False）。
+           在价值区间内=收盘在"公允价格"区域，在外=收盘偏离公允价格。
+    [新增] poc_volume_ratio       POC成交量占全天比例。衡量量能在单一价位的集中度。
+    [新增] high_volume_nodes      高量节点数：成交量>均值的价格bin数量。
+    [新增] low_volume_nodes       低量节点数：成交量<均值20%的价格bin数量（流动性空洞）。
+    实现方式：将全天价格范围分为20个等宽bin，每根1分钟K线的量按收盘价归入对应bin。
+    设计原则：全部只记录不入投票，从全新的"价格维度"榨干1分钟数据。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -972,6 +988,9 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     max_consec = compute_max_consecutive(bars)
     quadrants = compute_volume_price_quadrants(bars, volumes)
 
+    # --- v3.1 新增：Volume Profile——从价格维度看量分布 ---
+    vol_profile = compute_volume_profile(bars, volumes)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1070,6 +1089,15 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'vol_down_price_up_minutes': quadrants[1],
         'vol_up_price_down_minutes': quadrants[2],
         'vol_down_price_down_minutes': quadrants[3],
+        # --- v3.1 新增：Volume Profile——从价格维度看量分布 ---
+        'poc_price': vol_profile['poc_price'] if vol_profile else None,
+        'value_area_high': vol_profile['value_area_high'] if vol_profile else None,
+        'value_area_low': vol_profile['value_area_low'] if vol_profile else None,
+        'value_area_width': vol_profile['value_area_width'] if vol_profile else None,
+        'close_in_value_area': vol_profile['close_in_value_area'] if vol_profile else None,
+        'poc_volume_ratio': vol_profile['poc_volume_ratio'] if vol_profile else None,
+        'high_volume_nodes': vol_profile['high_volume_nodes'] if vol_profile else None,
+        'low_volume_nodes': vol_profile['low_volume_nodes'] if vol_profile else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1283,6 +1311,20 @@ def print_summary(stats: dict):
                   f'量缩价涨={stats["vdpu_sum"]:.0f}({stats["vdpu_sum"]/total_q:.0%}), '
                   f'量增价跌={stats["vupd_sum"]:.0f}({stats["vupd_sum"]/total_q:.0%}), '
                   f'量缩价跌={stats["vdpd_sum"]:.0f}({stats["vdpd_sum"]/total_q:.0%})')
+    # --- v3.1 Volume Profile 均值 ---
+    if stats.get('pocvr_n'):
+        print(f'  Volume Profile: POC量占比={stats["pocvr_sum"] / stats["pocvr_n"]:.1%} '
+              f'(量能在单一价位的集中度)')
+    if stats.get('vaw_n'):
+        print(f'  Volume Profile: 价值区间宽度={stats["vaw_sum"] / stats["vaw_n"]:.4f} '
+              f'(成交价格分散程度)')
+    if stats.get('civa_n'):
+        civa_rate = stats['civa_sum'] / stats['civa_n']
+        print(f'  Volume Profile: 收盘在价值区间内={civa_rate:.1%} '
+              f'({stats["civa_sum"]}/{stats["civa_n"]})')
+    if stats.get('hvn_n'):
+        print(f'  Volume Profile: 高量节点={stats["hvn_sum"] / stats["hvn_n"]:.1f}个, '
+              f'低量节点(流动性空洞)={stats["lvn_sum"] / stats["lvn_n"]:.1f}个')
     print(f'{line}\n')
 
 
@@ -1467,6 +1509,27 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
             if v is not None:
                 stats[f'{k}_sum'] += v
                 stats[f'{k}_n'] += 1
+        # v3.1 Volume Profile 累加
+        vp = entry.get('poc_volume_ratio')
+        if vp is not None:
+            stats['pocvr_sum'] += vp
+            stats['pocvr_n'] += 1
+        vaw = entry.get('value_area_width')
+        if vaw is not None:
+            stats['vaw_sum'] += vaw
+            stats['vaw_n'] += 1
+        civa = entry.get('close_in_value_area')
+        if civa is not None:
+            stats['civa_sum'] += 1 if civa else 0
+            stats['civa_n'] += 1
+        hvn = entry.get('high_volume_nodes')
+        if hvn is not None:
+            stats['hvn_sum'] += hvn
+            stats['hvn_n'] += 1
+        lvn = entry.get('low_volume_nodes')
+        if lvn is not None:
+            stats['lvn_sum'] += lvn
+            stats['lvn_n'] += 1
 
     return entries
 
@@ -1863,6 +1926,102 @@ def compute_volume_price_quadrants(bars, volumes):
     return (vupu, vdpu, vupd, vdpd)
 
 
+# --- v3.1 Volume Profile 参数 ---
+VP_BIN_COUNT = 20        # 价格分箱数量
+VP_VALUE_AREA_PCT = 0.70  # 价值区间包含的成交量比例
+VP_LOW_NODE_THRESHOLD = 0.20  # 低量节点阈值（<均值×此值）
+
+
+def compute_volume_profile(bars, volumes):
+    """v3.1 Volume Profile：从价格维度看量分布。
+    将全天价格范围分为N个等宽bin，每根1分钟K线的量按收盘价归入对应bin。
+    返回字典包含：poc_price, value_area_high, value_area_low, value_area_width,
+    close_in_value_area, poc_volume_ratio, high_volume_nodes, low_volume_nodes。
+    """
+    if not bars or not volumes or len(bars) < 10 or sum(volumes) <= 0:
+        return None
+
+    closes = [b['close'] for b in bars]
+    day_high = max(b['high'] for b in bars)
+    day_low = min(b['low'] for b in bars)
+    if day_high == day_low:
+        return None
+
+    # 1. 价格分箱
+    bin_width = (day_high - day_low) / VP_BIN_COUNT
+    bin_volumes = [0.0] * VP_BIN_COUNT
+    bin_centers = [day_low + (i + 0.5) * bin_width for i in range(VP_BIN_COUNT)]
+
+    for i in range(len(bars)):
+        c = closes[i]
+        v = volumes[i]
+        if v <= 0:
+            continue
+        # 确定收盘价属于哪个bin
+        bin_idx = int((c - day_low) / bin_width)
+        if bin_idx < 0:
+            bin_idx = 0
+        elif bin_idx >= VP_BIN_COUNT:
+            bin_idx = VP_BIN_COUNT - 1
+        bin_volumes[bin_idx] += v
+
+    total_volume = sum(bin_volumes)
+    if total_volume <= 0:
+        return None
+
+    # 2. POC：成交量最大的bin
+    poc_idx = bin_volumes.index(max(bin_volumes))
+    poc_price = bin_centers[poc_idx]
+    poc_volume_ratio = round(bin_volumes[poc_idx] / total_volume, 4)
+
+    # 3. 价值区间：从POC向上下扩展，直到累计成交量达到70%
+    target_volume = total_volume * VP_VALUE_AREA_PCT
+    accumulated = bin_volumes[poc_idx]
+    vah_idx = poc_idx
+    val_idx = poc_idx
+
+    while accumulated < target_volume and (vah_idx < VP_BIN_COUNT - 1 or val_idx > 0):
+        # 比较上下相邻bin的成交量，优先扩展成交量大的一侧
+        upper_vol = bin_volumes[vah_idx + 1] if vah_idx < VP_BIN_COUNT - 1 else -1
+        lower_vol = bin_volumes[val_idx - 1] if val_idx > 0 else -1
+
+        if upper_vol >= lower_vol and vah_idx < VP_BIN_COUNT - 1:
+            vah_idx += 1
+            accumulated += bin_volumes[vah_idx]
+        elif val_idx > 0:
+            val_idx -= 1
+            accumulated += bin_volumes[val_idx]
+        elif vah_idx < VP_BIN_COUNT - 1:
+            vah_idx += 1
+            accumulated += bin_volumes[vah_idx]
+        else:
+            break
+
+    value_area_high = bin_centers[vah_idx] + bin_width / 2  # bin的上沿
+    value_area_low = bin_centers[val_idx] - bin_width / 2   # bin的下沿
+    value_area_width = round(value_area_high - value_area_low, 4)
+
+    # 4. 收盘价是否在价值区间内
+    close_price = closes[-1]
+    close_in_value_area = value_area_low <= close_price <= value_area_high
+
+    # 5. 高量节点/低量节点
+    mean_bin_volume = total_volume / VP_BIN_COUNT
+    high_volume_nodes = sum(1 for v in bin_volumes if v > mean_bin_volume)
+    low_volume_nodes = sum(1 for v in bin_volumes if v < mean_bin_volume * VP_LOW_NODE_THRESHOLD)
+
+    return {
+        'poc_price': round(poc_price, 4),
+        'value_area_high': round(value_area_high, 4),
+        'value_area_low': round(value_area_low, 4),
+        'value_area_width': value_area_width,
+        'close_in_value_area': close_in_value_area,
+        'poc_volume_ratio': poc_volume_ratio,
+        'high_volume_nodes': high_volume_nodes,
+        'low_volume_nodes': low_volume_nodes,
+    }
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -1948,7 +2107,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.0（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.1（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -1982,6 +2141,9 @@ def main():
         'mcu_sum', 'mcu_n', 'mcd_sum', 'mcd_n',
         'vupu_sum', 'vupu_n', 'vdpu_sum', 'vdpu_n',
         'vupd_sum', 'vupd_n', 'vdpd_sum', 'vdpd_n',
+        # v3.1 新增：Volume Profile
+        'pocvr_sum', 'pocvr_n', 'vaw_sum', 'vaw_n',
+        'civa_sum', 'civa_n', 'hvn_sum', 'hvn_n', 'lvn_sum', 'lvn_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
