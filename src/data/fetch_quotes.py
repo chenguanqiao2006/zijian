@@ -39,6 +39,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # src/
 from data.paths import kline_path, min1_path, universe_path, validate_code, self_check as paths_self_check
+from data import validator as data_validator
+from data import status as data_status
 
 CST = timezone(timedelta(hours=8))
 UA = {
@@ -348,6 +350,40 @@ def get_1min_universe():
 # 工作单元
 # ---------------------------------------------------------------------------
 
+def _bars_to_dicts(bars):
+    """把 tuple 格式 [time, o, h, l, c, v] 转成 dict 列表供校验器使用。"""
+    out = []
+    for b in bars:
+        if len(b) >= 6:
+            out.append({"time": b[0], "open": b[1], "high": b[2],
+                        "low": b[3], "close": b[4], "volume": b[5]})
+    return out
+
+
+def _validate_and_record(code, data_type, source, bars):
+    """校验数据并更新拉取状态（统一入口）。"""
+    try:
+        dicts = _bars_to_dicts(bars)
+        if data_type == "min1":
+            is_valid, issues, stats = data_validator.validate_min1(dicts, code)
+            trading_days = stats.get("trading_days")
+        else:
+            is_valid, issues, stats = data_validator.validate_daily(dicts, code)
+            trading_days = None
+        data_status.update_stock_status(
+            code, data_type, source,
+            bar_count=stats.get("bar_count", len(bars)),
+            trading_days=trading_days,
+            date_range=stats.get("date_range", [None, None]),
+            is_valid=is_valid, issues=issues,
+        )
+        return is_valid, issues, stats
+    except Exception as e:
+        # 校验失败不影响数据保存，只记录
+        print(f'    [WARN] {code} {data_type} 校验异常: {type(e).__name__}: {e}')
+        return True, [], {"bar_count": len(bars)}
+
+
 def daily_worker(code, datalen, full=False):
     time.sleep(0.15)  # 轻微限速
     src, bars = fetch_daily(code, datalen)
@@ -365,6 +401,7 @@ def daily_worker(code, datalen, full=False):
                 local = []
         merged = merge_bars(local, bars)
     save_json(path, merged)
+    _validate_and_record(code, "daily", src, merged)
     return True, src
 
 
@@ -380,7 +417,9 @@ def min1_worker(code):
             local = json.loads(path.read_text(encoding='utf-8'))
         except (json.JSONDecodeError, UnicodeDecodeError):
             local = []
-    save_json(path, merge_bars(local, bars))
+    merged = merge_bars(local, bars)
+    save_json(path, merged)
+    _validate_and_record(code, "min1", src, merged)
     return True, src
 
 
@@ -451,6 +490,10 @@ def main():
     print(f'[INFO] 1分钟源分布: {sources}')
     if failed:
         print(f'[INFO] 1分钟失败清单(前20): {", ".join(failed[:20])}')
+
+    # --- 拉取状态汇总 ---
+    print()
+    data_status.print_summary()
 
     print('[INFO] fetch_quotes.py 全部结束')
     return 0
