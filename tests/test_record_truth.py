@@ -46,6 +46,7 @@ from src.analysis.record_truth import (
     compute_volume_profile,
     compute_vwap_slope, compute_vwap_std_band,
     compute_open_close_5min,
+    compute_six_sessions,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1624,6 +1625,90 @@ class TestV33OpenClose5min:
         )
         for field in v33_fields:
             assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v3.4 新信号：6时段涨跌幅+量占比单独输出
+# ---------------------------------------------------------------------------
+
+class TestV34SixSessions:
+    def test_six_sessions_basic(self):
+        # 基本功能：返回12个字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['volume'] = volumes[i]
+        result = compute_six_sessions(bars, volumes)
+        assert result is not None
+        for i in range(1, 7):
+            assert f'session_{i}_return' in result
+            assert f'session_{i}_volume_ratio' in result
+
+    def test_six_sessions_morning_up(self):
+        # 早盘上涨：时段1涨跌幅为正
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        for i in range(30):
+            bars[i]['close'] = 100 + (i + 1) * 0.1  # 早盘30分钟持续上涨
+            bars[i]['volume'] = volumes[i]
+        for i in range(30, 240):
+            bars[i]['close'] = 103.0
+            bars[i]['volume'] = volumes[i]
+        result = compute_six_sessions(bars, volumes)
+        assert result is not None
+        assert result['session_1_return'] > 0
+
+    def test_six_sessions_volume_ratio_sum(self):
+        # 6时段量占比之和应接近1（100%）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['volume'] = volumes[i]
+        result = compute_six_sessions(bars, volumes)
+        assert result is not None
+        total_ratio = sum(result[f'session_{i}_volume_ratio'] for i in range(1, 7))
+        assert abs(total_ratio - 1.0) < 0.01  # 6时段量占比之和≈100%
+
+    def test_six_sessions_short_data(self):
+        # 数据不足时仍能切分（按比例）
+        bars = make_bars(n=60, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 60
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['volume'] = volumes[i]
+        result = compute_six_sessions(bars, volumes)
+        assert result is not None
+        for i in range(1, 7):
+            assert result[f'session_{i}_return'] is not None
+            assert result[f'session_{i}_volume_ratio'] is not None
+
+    def test_six_sessions_afternoon_volume_spike(self):
+        # 下午放量：时段3量占比高
+        bars = make_bars(n=240, price=100.0, vol=100.0)
+        volumes = [100.0] * 240
+        for i in range(120, 180):
+            volumes[i] = 5000.0  # 下午前段巨量
+            bars[i]['volume'] = volumes[i]
+        for i in list(range(120)) + list(range(180, 240)):
+            bars[i]['volume'] = volumes[i]
+        result = compute_six_sessions(bars, volumes)
+        assert result is not None
+        assert result['session_3_volume_ratio'] > 0.3  # 下午前段量占比>30%
+
+    def test_analyze_day_v34_fields(self):
+        # analyze_day 返回值包含 v3.4 字段（12个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        for i in range(1, 7):
+            assert f'session_{i}_return' in entry
+            assert f'session_{i}_volume_ratio' in entry
 
 
 if __name__ == '__main__':

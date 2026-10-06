@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v3.3（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.4（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -180,6 +180,17 @@ v3.3 相对 v3.2 的变更（开盘5分钟/尾盘5分钟独立特征——时段
     [新增] open_close_volume_ratio   开盘5分钟量/尾盘5分钟量。
            >1=早盘放量更甚，<1=尾盘放量更甚。
     设计原则：全部只记录不入投票，从"时段博弈"维度榨干1分钟数据。
+
+v3.4 相对 v3.3 的变更（6时段涨跌幅+量占比单独输出——更细时段切分，12个新字段）：
+    将全天交易时间按比例切分为6个时段，每个时段单独输出涨跌幅和量占比：
+    时段1（早盘30分钟，0-12.5%）：session_1_return / session_1_volume_ratio
+    时段2（上午后段90分钟，12.5-50%）：session_2_return / session_2_volume_ratio
+    时段3（下午前段60分钟，50-75%）：session_3_return / session_3_volume_ratio
+    时段4（下午中段30分钟，75-87.5%）：session_4_return / session_4_volume_ratio
+    时段5（尾盘前段15分钟，87.5-93.75%）：session_5_return / session_5_volume_ratio
+    时段6（尾盘后段15分钟，93.75-100%）：session_6_return / session_6_volume_ratio
+    切分方式：按K线索引比例切分（不依赖时间戳），数据不足时按实际长度等比缩放。
+    设计原则：全部只记录不入投票，从"更细时段"维度榨干1分钟数据。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -1029,6 +1040,9 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     # --- v3.3 新增：开盘5分钟/尾盘5分钟独立特征——时段博弈 ---
     open_close_5min = compute_open_close_5min(bars, volumes)
 
+    # --- v3.4 新增：6时段涨跌幅+量占比单独输出——更细时段切分 ---
+    six_sessions = compute_six_sessions(bars, volumes)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1150,6 +1164,19 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'close_5min_pull_or_push': open_close_5min['close_5min_pull_or_push'] if open_close_5min else None,
         'open_close_return_diff': open_close_5min['open_close_return_diff'] if open_close_5min else None,
         'open_close_volume_ratio': open_close_5min['open_close_volume_ratio'] if open_close_5min else None,
+        # --- v3.4 新增：6时段涨跌幅+量占比单独输出 ---
+        'session_1_return': six_sessions['session_1_return'] if six_sessions else None,
+        'session_1_volume_ratio': six_sessions['session_1_volume_ratio'] if six_sessions else None,
+        'session_2_return': six_sessions['session_2_return'] if six_sessions else None,
+        'session_2_volume_ratio': six_sessions['session_2_volume_ratio'] if six_sessions else None,
+        'session_3_return': six_sessions['session_3_return'] if six_sessions else None,
+        'session_3_volume_ratio': six_sessions['session_3_volume_ratio'] if six_sessions else None,
+        'session_4_return': six_sessions['session_4_return'] if six_sessions else None,
+        'session_4_volume_ratio': six_sessions['session_4_volume_ratio'] if six_sessions else None,
+        'session_5_return': six_sessions['session_5_return'] if six_sessions else None,
+        'session_5_volume_ratio': six_sessions['session_5_volume_ratio'] if six_sessions else None,
+        'session_6_return': six_sessions['session_6_return'] if six_sessions else None,
+        'session_6_volume_ratio': six_sessions['session_6_volume_ratio'] if six_sessions else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1415,6 +1442,15 @@ def print_summary(stats: dict):
     if stats.get('ocvr_n'):
         print(f'  开盘/尾盘量比={stats["ocvr_sum"] / stats["ocvr_n"]:.3f} '
               f'(>1早盘放量更甚, <1尾盘放量更甚)')
+    # --- v3.4 6时段 均值 ---
+    session_names = ['早盘30分', '上午后段', '下午前段', '下午中段', '尾盘前段', '尾盘后段']
+    print('  6时段涨跌幅+量占比:')
+    for i, name in enumerate(session_names, 1):
+        r_key = f's{i}r'
+        vr_key = f's{i}vr'
+        r_avg = stats[f'{r_key}_sum'] / stats[f'{r_key}_n'] if stats.get(f'{r_key}_n') else 0
+        vr_avg = stats[f'{vr_key}_sum'] / stats[f'{vr_key}_n'] if stats.get(f'{vr_key}_n') else 0
+        print(f'    {name:8s}: 涨跌={r_avg:+.4f}%, 量占比={vr_avg:.1%}')
     print(f'{line}\n')
 
 
@@ -1652,6 +1688,16 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         c5pp = entry.get('close_5min_pull_or_push')
         if c5pp:
             stats['c5pp_counts'][c5pp] = stats['c5pp_counts'].get(c5pp, 0) + 1
+        # v3.4 6时段 累加
+        for i in range(1, 7):
+            r = entry.get(f'session_{i}_return')
+            vr = entry.get(f'session_{i}_volume_ratio')
+            if r is not None:
+                stats[f's{i}r_sum'] += r
+                stats[f's{i}r_n'] += 1
+            if vr is not None:
+                stats[f's{i}vr_sum'] += vr
+                stats[f's{i}vr_n'] += 1
 
     return entries
 
@@ -2313,6 +2359,64 @@ def compute_open_close_5min(bars, volumes):
     }
 
 
+# ---------------------------------------------------------------------------
+# v3.4 新增：6时段涨跌幅+量占比单独输出——更细时段切分
+# ---------------------------------------------------------------------------
+
+# 6时段切分比例（按K线索引比例，不依赖时间戳）
+# 时段1: 0-12.5%（早盘30分钟）
+# 时段2: 12.5-50%（上午后段90分钟）
+# 时段3: 50-75%（下午前段60分钟）
+# 时段4: 75-87.5%（下午中段30分钟）
+# 时段5: 87.5-93.75%（尾盘前段15分钟）
+# 时段6: 93.75-100%（尾盘后段15分钟）
+SIX_SESSION_BOUNDARIES = [
+    (0.0, 0.125),
+    (0.125, 0.5),
+    (0.5, 0.75),
+    (0.75, 0.875),
+    (0.875, 0.9375),
+    (0.9375, 1.0),
+]
+
+
+def compute_six_sessions(bars, volumes):
+    """v3.4 6时段涨跌幅+量占比单独输出。
+    按K线索引比例切分为6个时段，每个时段输出涨跌幅和量占比。
+    返回字典包含12个字段：session_1_return, session_1_volume_ratio, ..., session_6_return, session_6_volume_ratio。
+    """
+    if not bars or not volumes or len(bars) < 12 or sum(volumes) <= 0:
+        return None
+
+    closes = [b['close'] for b in bars]
+    total_volume = sum(volumes)
+    n = len(bars)
+
+    result = {}
+    for i, (start_pct, end_pct) in enumerate(SIX_SESSION_BOUNDARIES, 1):
+        start_idx = max(0, int(n * start_pct))
+        end_idx = min(n - 1, int(n * end_pct) - 1)
+        if end_idx <= start_idx:
+            end_idx = min(n - 1, start_idx + 1)
+
+        # 时段涨跌幅 = (时段末收盘 / 时段初收盘 - 1) × 100
+        session_start_close = closes[start_idx]
+        session_end_close = closes[end_idx]
+        if session_start_close > 0:
+            session_return = round((session_end_close / session_start_close - 1) * 100, 4)
+        else:
+            session_return = None
+
+        # 时段量占比 = 时段成交量 / 全天成交量
+        session_volume = sum(volumes[start_idx:end_idx + 1])
+        session_volume_ratio = round(session_volume / total_volume, 4) if total_volume > 0 else None
+
+        result[f'session_{i}_return'] = session_return
+        result[f'session_{i}_volume_ratio'] = session_volume_ratio
+
+    return result
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -2398,7 +2502,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.3（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.4（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -2441,6 +2545,13 @@ def main():
         'o5r_sum', 'o5r_n', 'o5vr_sum', 'o5vr_n',
         'c5r_sum', 'c5r_n', 'c5vr_sum', 'c5vr_n',
         'ocrd_sum', 'ocrd_n', 'ocvr_sum', 'ocvr_n',
+        # v3.4 新增：6时段
+        's1r_sum', 's1r_n', 's1vr_sum', 's1vr_n',
+        's2r_sum', 's2r_n', 's2vr_sum', 's2vr_n',
+        's3r_sum', 's3r_n', 's3vr_sum', 's3vr_n',
+        's4r_sum', 's4r_n', 's4vr_sum', 's4vr_n',
+        's5r_sum', 's5r_n', 's5vr_sum', 's5vr_n',
+        's6r_sum', 's6r_n', 's6vr_sum', 's6vr_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
