@@ -33,6 +33,7 @@ from src.analysis.record_truth import (
     filter_session, load_and_group_days,
     safe_corr, session_volume_profile, flatness_score, build_feature_snapshot,
     compute_flat_vol_ratio, compute_tail_gain,
+    compute_big_order_stats,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -264,6 +265,107 @@ class TestV23Signals:
         vols = [1000, 0, 1000, 0, 1000, 1000, 0, 1000, 1000, 1000]
         zero_count = sum(1 for v in vols if v <= 0)
         assert zero_count == 3
+
+
+# ---------------------------------------------------------------------------
+# v2.4 新信号：大单拆分 + 主力净流入
+# ---------------------------------------------------------------------------
+
+class TestV24Signals:
+    def test_big_order_stats_basic(self):
+        # 基本功能：构造有阳线/阴线/大单的场景
+        bars = []
+        vols = []
+        for i in range(10):
+            if i % 2 == 0:  # 阳线
+                bars.append({'open': 100, 'close': 101, 'high': 101, 'low': 100})
+                vols.append(5000)  # 放量
+            else:  # 阴线
+                bars.append({'open': 101, 'close': 100, 'high': 101, 'low': 100})
+                vols.append(5000)  # 放量
+        stats = compute_big_order_stats(bars, vols, 1000)  # 均量1000，3倍=3000
+        assert stats is not None
+        assert stats['big_order_minutes'] == 10  # 全部是大单
+        assert stats['big_order_ratio'] == 1.0
+        # 5阳5阴，净流入=0
+        assert abs(stats['main_net_inflow']) < 1
+        assert abs(stats['order_flow_imbalance']) < 0.01
+
+    def test_big_order_stats_all_yang(self):
+        # 全部阳线 → 净流入为正
+        bars = [{'open': 100, 'close': 101, 'high': 101, 'low': 100} for _ in range(10)]
+        vols = [2000] * 10
+        stats = compute_big_order_stats(bars, vols, 1000)
+        assert stats is not None
+        assert stats['main_net_inflow'] > 0
+        assert stats['main_net_inflow_pct'] > 0
+        assert stats['order_flow_imbalance'] > 0
+
+    def test_big_order_stats_all_yin(self):
+        # 全部阴线 → 净流出为负
+        bars = [{'open': 101, 'close': 100, 'high': 101, 'low': 100} for _ in range(10)]
+        vols = [2000] * 10
+        stats = compute_big_order_stats(bars, vols, 1000)
+        assert stats is not None
+        assert stats['main_net_inflow'] < 0
+        assert stats['order_flow_imbalance'] < 0
+
+    def test_big_order_stats_flat_bar(self):
+        # 平盘（close==open）→ 买卖平分
+        bars = [{'open': 100, 'close': 100, 'high': 100, 'low': 100} for _ in range(10)]
+        vols = [2000] * 10
+        stats = compute_big_order_stats(bars, vols, 1000)
+        assert stats is not None
+        # 平盘买卖平分，净流入=0
+        assert abs(stats['main_net_inflow']) < 1
+        assert abs(stats['order_flow_imbalance']) < 0.01
+
+    def test_big_order_stats_no_big(self):
+        # 没有大单（量 < 均量×3）
+        bars = [{'open': 100, 'close': 101, 'high': 101, 'low': 100} for _ in range(10)]
+        vols = [1000] * 10  # 等于均量，不超过3倍
+        stats = compute_big_order_stats(bars, vols, 1000)
+        assert stats is not None
+        assert stats['big_order_minutes'] == 0
+        assert stats['big_order_ratio'] == 0
+        assert stats['big_order_net_inflow'] == 0  # 无大单，大单净流入=0
+
+    def test_big_order_stats_zero_vol(self):
+        # 零成交量 → 返回None
+        bars = [{'open': 100, 'close': 101, 'high': 101, 'low': 100} for _ in range(10)]
+        vols = [0] * 10
+        stats = compute_big_order_stats(bars, vols, 0)
+        assert stats is None
+
+    def test_analyze_day_v24_fields(self):
+        # analyze_day 返回值包含 v2.4 字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        # v2.4 六个字段都存在
+        for field in ('big_order_minutes', 'big_order_ratio', 'main_net_inflow',
+                      'main_net_inflow_pct', 'big_order_net_inflow', 'order_flow_imbalance'):
+            assert field in entry, f'缺少字段: {field}'
+        # 值不为 None
+        assert entry['big_order_minutes'] is not None
+        assert entry['main_net_inflow'] is not None
+        assert entry['order_flow_imbalance'] is not None
+
+    def test_order_flow_imbalance_range(self):
+        # order_flow_imbalance 应在 [-1, 1] 范围内
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 3 - 1) * 0.05
+            b['high'] = max(b['open'], b['close']) + 0.02
+            b['low'] = min(b['open'], b['close']) - 0.02
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        ofi = entry['order_flow_imbalance']
+        assert -1.0 <= ofi <= 1.0
 
 
 # ---------------------------------------------------------------------------

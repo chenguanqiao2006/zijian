@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.3（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v2.4（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -27,10 +27,25 @@ v2.3 相对 v2.2 的变更（三大新增信号，只记录、暂不入投票）
     不影响 verdict / quant_pct / 四指标投票；待 2026-11-01 阈值体检
     给出新字段的真实分布后，再决定是否纳入投票体系。
 
+v2.4 相对 v2.3 的变更（六大新增信号，只记录、暂不入投票）：
+    [新增] big_order_minutes     大单分钟数 —— 量 > 当日均量×3 的分钟数。
+    [新增] big_order_ratio       大单分钟占比 —— 大单分钟数 / 有成交分钟数。
+    [新增] main_net_inflow       主力净流入估算（手）—— 阳线分钟量 - 阴线分钟量。
+           基于1分钟OHLCV的粗略估算（无逐笔数据时的近似算法）：
+           阳线分钟视为主动买入，阴线分钟视为主动卖出，平盘分钟平分。
+    [新增] main_net_inflow_pct   主力净流入占比 —— 净流入 / 总成交量。
+    [新增] big_order_net_inflow  大单净流入（手）—— 放量阳线量 - 放量阴线量。
+           只统计"大单分钟"（量>均量×3）的买卖方向，过滤散户噪声。
+    [新增] order_flow_imbalance  订单流失衡 —— (阳量-阴量)/(阳量+阴量)，范围[-1,1]。
+           +1=全天买入主导，-1=全天卖出主导，0=买卖均衡。
+    设计原则：与 v2.3 一致 —— 六个新字段只存不投，不影响 verdict / quant_pct；
+    待积累足够数据后做阈值体检，再决定是否纳入投票或独立输出。
+
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
     - 从 scripts/ 移到 src/analysis/，支持模块导入 + 脚本运行
     - 核心分析逻辑与 aaa 版 v2.3 完全一致，判定口径不变
+    - v2.4 为 zijian 版新增（aaa 库尚未升级到 v2.4）
 
 用法：
     python -m src.analysis.record_truth               # 正常运行
@@ -75,6 +90,9 @@ SESSION_SPLITS = [
 # --- v2.3 新信号参数 ---
 TICK_SIZE = 0.011        # 平价判定：|收-开| ≤ 约1个tick（A股统一0.01元，留浮点余量）
 HEAVY_VOL_MULT = 2.0     # 放量判定：分钟量 ≥ 2 × 当日分钟均量
+
+# --- v2.4 新信号参数 ---
+BIG_ORDER_VOL_MULT = 3.0  # 大单分钟判定：分钟量 > 当日均量 × 3（过滤散户噪声）
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +396,81 @@ def compute_tail_gain(bars):
 
 
 # ---------------------------------------------------------------------------
+# v2.4 新增指标：大单拆分 + 主力净流入
+# ---------------------------------------------------------------------------
+
+def compute_big_order_stats(bars, volumes, mean_vol):
+    """v2.4 六大指标一次性计算（基于1分钟OHLCV，无逐笔数据时的近似算法）。
+
+    返回字典：
+        big_order_minutes     大单分钟数（量 > 均量×BIG_ORDER_VOL_MULT）
+        big_order_ratio       大单分钟占比（大单分钟数 / 有成交分钟数）
+        main_net_inflow       主力净流入估算（手）= 阳线分钟量 - 阴线分钟量
+        main_net_inflow_pct   主力净流入占比 = 净流入 / 总成交量
+        big_order_net_inflow  大单净流入（手）= 放量阳线量 - 放量阴线量
+        order_flow_imbalance  订单流失衡 = (阳量-阴量)/(阳量+阴量)，范围[-1,1]
+
+    算法说明：
+        - 阳线分钟(close>open)：成交量归为主动买入
+        - 阴线分钟(close<open)：成交量归为主动卖出
+        - 平盘分钟(close==open)：成交量平分为买入和卖出
+        - 大单分钟：量 > 当日均量 × BIG_ORDER_VOL_MULT（默认3倍）
+        - 这是无逐笔数据时的近似估算，精度低于Level-2数据，但趋势可参考
+    """
+    if mean_vol <= 0:
+        return None
+
+    big_threshold = mean_vol * BIG_ORDER_VOL_MULT
+    active_mins = 0          # 有成交分钟数
+    big_order_mins = 0       # 大单分钟数
+    yang_vol = 0.0           # 阳线分钟总成交量
+    yin_vol = 0.0            # 阴线分钟总成交量
+    big_yang_vol = 0.0       # 大单阳线分钟总成交量
+    big_yin_vol = 0.0        # 大单阴线分钟总成交量
+
+    for b, v in zip(bars, volumes):
+        if v <= 0:
+            continue
+        active_mins += 1
+        o, c = b['open'], b['close']
+        is_big = v > big_threshold
+        if is_big:
+            big_order_mins += 1
+
+        if c > o:  # 阳线 → 主动买入
+            yang_vol += v
+            if is_big:
+                big_yang_vol += v
+        elif c < o:  # 阴线 → 主动卖出
+            yin_vol += v
+            if is_big:
+                big_yin_vol += v
+        else:  # 平盘 → 买卖平分
+            yang_vol += v / 2
+            yin_vol += v / 2
+            if is_big:
+                big_yang_vol += v / 2
+                big_yin_vol += v / 2
+
+    total_vol = yang_vol + yin_vol
+    if total_vol <= 0 or active_mins <= 0:
+        return None
+
+    main_net_inflow = yang_vol - yin_vol
+    big_order_net_inflow = big_yang_vol - big_yin_vol
+
+    return {
+        'big_order_minutes': big_order_mins,
+        'big_order_ratio': round(big_order_mins / active_mins, 4),
+        'main_net_inflow': round(main_net_inflow, 1),
+        'main_net_inflow_pct': round(main_net_inflow / total_vol, 4),
+        'big_order_net_inflow': round(big_order_net_inflow, 1),
+        'order_flow_imbalance': round(
+            (yang_vol - yin_vol) / total_vol, 4) if total_vol > 0 else 0.0,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 涨跌停 / 一字板检测
 # ---------------------------------------------------------------------------
 
@@ -453,6 +546,9 @@ def analyze_day(bars, code, prev_close):
     tail_gain = compute_tail_gain(bars)
     zero_vol_mins = sum(1 for v in volumes if v <= 0)   # 盘中真实零成交（幽灵行已裁剪）
 
+    # --- v2.4 新增六信号（只记录，不入投票）：大单拆分 + 主力净流入 ---
+    big_stats = compute_big_order_stats(bars, volumes, vol_mean)
+
     hits = 0
     if cv < THRESH['cv']:
         hits += 1
@@ -481,6 +577,13 @@ def analyze_day(bars, code, prev_close):
         'flat_vol_ratio': round(flat_vol_ratio, 4) if flat_vol_ratio is not None else None,
         'tail_gain': round(tail_gain, 6) if tail_gain is not None else None,
         'zero_vol_mins': zero_vol_mins,
+        # --- v2.4 新增：大单拆分 + 主力净流入 ---
+        'big_order_minutes': big_stats['big_order_minutes'] if big_stats else None,
+        'big_order_ratio': big_stats['big_order_ratio'] if big_stats else None,
+        'main_net_inflow': big_stats['main_net_inflow'] if big_stats else None,
+        'main_net_inflow_pct': big_stats['main_net_inflow_pct'] if big_stats else None,
+        'big_order_net_inflow': big_stats['big_order_net_inflow'] if big_stats else None,
+        'order_flow_imbalance': big_stats['order_flow_imbalance'] if big_stats else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -576,6 +679,19 @@ def print_summary(stats: dict):
         print(f'  指标均值: tail_gain={stats["tg_sum"] / stats["tg_n"]:+.3%}')
     if stats['zv_n']:
         print(f'  指标均值: zero_vol_mins={stats["zv_sum"] / stats["zv_n"]:.1f} 分钟')
+    # --- v2.4 新信号均值：大单拆分 + 主力净流入 ---
+    if stats['bom_n']:
+        print(f'  指标均值: big_order_minutes={stats["bom_sum"] / stats["bom_n"]:.1f} 分钟')
+    if stats['bor_n']:
+        print(f'  指标均值: big_order_ratio={stats["bor_sum"] / stats["bor_n"]:.2%}')
+    if stats['mni_n']:
+        print(f'  指标均值: main_net_inflow={stats["mni_sum"] / stats["mni_n"]:+.0f} 手')
+    if stats['mnip_n']:
+        print(f'  指标均值: main_net_inflow_pct={stats["mnip_sum"] / stats["mnip_n"]:+.2%}')
+    if stats['boni_n']:
+        print(f'  指标均值: big_order_net_inflow={stats["boni_sum"] / stats["boni_n"]:+.0f} 手')
+    if stats['ofi_n']:
+        print(f'  指标均值: order_flow_imbalance={stats["ofi_sum"] / stats["ofi_n"]:+.3f}')
     print(f'{line}\n')
 
 
@@ -641,6 +757,16 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool) ->
         if zv is not None:
             stats['zv_sum'] += zv
             stats['zv_n'] += 1
+        # v2.4 新信号累加：大单拆分 + 主力净流入
+        for k, v in (('bom', entry.get('big_order_minutes')),
+                     ('bor', entry.get('big_order_ratio')),
+                     ('mni', entry.get('main_net_inflow')),
+                     ('mnip', entry.get('main_net_inflow_pct')),
+                     ('boni', entry.get('big_order_net_inflow')),
+                     ('ofi', entry.get('order_flow_imbalance'))):
+            if v is not None:
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
 
     return entries
 
@@ -657,6 +783,10 @@ def main():
         'files_deleted', 'files_kept',
         'cv_sum', 'cv_n', 'corr_sum', 'corr_n', 'tail_sum', 'tail_n', 'flat_sum', 'flat_n',
         'fv_sum', 'fv_n', 'tg_sum', 'tg_n', 'zv_sum', 'zv_n',
+        # v2.4 新增：大单拆分 + 主力净流入
+        'bom_sum', 'bom_n', 'bor_sum', 'bor_n',
+        'mni_sum', 'mni_n', 'mnip_sum', 'mnip_n',
+        'boni_sum', 'boni_n', 'ofi_sum', 'ofi_n',
     )}
 
     kline_1min_dir = min1_dir()  # 经目录宪法
