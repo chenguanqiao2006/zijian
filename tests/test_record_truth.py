@@ -36,6 +36,8 @@ from src.analysis.record_truth import (
     compute_big_order_stats, compute_pattern_stats,
     _pct_rank, compute_vwap_hold_ratio, compute_weave_score, compute_pm_reversal,
     load_market_volume,
+    compute_morning_afternoon_vol_ratio, compute_volume_peak_concentration,
+    compute_price_volume_divergence, compute_wave_features,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -925,6 +927,114 @@ class TestV27MarketVolRatio:
         # 缩量
         entry_low = analyze_day(bars, 'sh600519', 100.0, market_vol_ratio=0.7)
         assert entry_low['market_vol_ratio'] < 1.0
+
+
+# ---------------------------------------------------------------------------
+# v2.8 新信号：榨干1分钟数据——6个新字段
+# ---------------------------------------------------------------------------
+
+class TestV28ExtractEveryDrop:
+    def test_morning_afternoon_vol_ratio_basic(self):
+        # 上午放量：上午量 > 下午量
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [2000.0] * 120 + [1000.0] * 120  # 上午量是下午2倍
+        for i, b in enumerate(bars):
+            b['volume'] = volumes[i]
+        ratio = compute_morning_afternoon_vol_ratio(bars, volumes)
+        assert ratio is not None
+        assert ratio > 1.0  # 上午放量
+
+    def test_morning_afternoon_vol_ratio_afternoon_heavy(self):
+        # 下午放量：下午量 > 上午量
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 120 + [2000.0] * 120
+        for i, b in enumerate(bars):
+            b['volume'] = volumes[i]
+        ratio = compute_morning_afternoon_vol_ratio(bars, volumes)
+        assert ratio is not None
+        assert ratio < 1.0  # 下午放量
+
+    def test_volume_peak_concentration_basic(self):
+        # 量峰集中度：量最大的3分钟占比
+        volumes = [100.0] * 100 + [1000.0, 1000.0, 1000.0]  # 3个巨量分钟
+        conc = compute_volume_peak_concentration(volumes)
+        assert conc is not None
+        total = sum(volumes)
+        expected = 3000.0 / total
+        assert abs(conc - expected) < 0.01
+
+    def test_volume_peak_concentration_uniform(self):
+        # 量均匀时集中度低
+        volumes = [100.0] * 100
+        conc = compute_volume_peak_concentration(volumes)
+        assert conc is not None
+        assert conc == 0.03  # 3/100 = 3%
+
+    def test_price_volume_divergence_no_divergence(self):
+        # 无背离：价新高时量也放大
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.01  # 持续上涨
+            b['high'] = b['close'] + 0.02
+            b['low'] = b['close'] - 0.02
+            if i == 99:  # 最后一天价最高，量也放大
+                volumes[99] = 5000.0
+                b['volume'] = 5000.0
+        divergence = compute_price_volume_divergence(bars, volumes)
+        assert divergence == 'no_divergence'
+
+    def test_price_volume_divergence_top(self):
+        # 顶背离：价新高但量不放大
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.01  # 持续上涨
+            b['high'] = b['close'] + 0.02
+            b['low'] = b['close'] - 0.02
+            if i == 99:  # 最后一天价最高，但量不放大（仍为1000）
+                pass
+        divergence = compute_price_volume_divergence(bars, volumes)
+        # 价创新高(99)，但量(1000)没有超过过去30分钟均量(1000)，应顶背离
+        assert divergence == 'top_divergence'
+
+    def test_wave_features_basic(self):
+        # 量波特征基本功能
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        vol_mean = 1000.0
+        features = compute_wave_features(bars, volumes, vol_mean)
+        assert features is not None
+        assert 'wave_morning' in features
+        assert 'wave_close' in features
+        assert 'wave_pulses' in features
+        # 量均匀时，早盘30分钟占比 = 30/240 = 0.125
+        assert abs(features['wave_morning'] - 0.125) < 0.01
+        assert features['wave_pulses'] == 0  # 量均匀，无脉冲
+
+    def test_wave_features_pulses(self):
+        # 脉冲数：量 > 均量×2 的分钟数
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        volumes[0] = 3000.0   # 脉冲
+        volumes[100] = 2500.0  # 脉冲
+        vol_mean = sum(volumes) / len(volumes)
+        features = compute_wave_features(bars, volumes, vol_mean)
+        assert features is not None
+        assert features['wave_pulses'] >= 2
+
+    def test_analyze_day_v28_fields(self):
+        # analyze_day 返回值包含 v2.8 字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        for field in ('morning_afternoon_vol_ratio', 'volume_peak_concentration',
+                      'price_volume_divergence', 'wave_morning', 'wave_close', 'wave_pulses'):
+            assert field in entry, f'缺少字段: {field}'
 
 
 if __name__ == '__main__':

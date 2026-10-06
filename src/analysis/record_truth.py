@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.7（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v2.8（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -84,6 +84,21 @@ v2.7 相对 v2.6 的变更（大盘量比，移植 yaox v3.0）：
            若指数日线数据缺失，该字段为 None，不影响其他判定。
     设计原则：只记录不入投票，先积累数据再做阈值体检。
 
+v2.8 相对 v2.7 的变更（榨干1分钟数据——6个新字段）：
+    [新增] morning_afternoon_vol_ratio  上下午量比 —— 上午成交量/下午成交量。
+           >1=上午放量，<1=下午放量。识别主力偏好的放量时段。
+    [新增] volume_peak_concentration    量峰集中度 —— 量最大的3个分钟成交量之和
+           / 全天总成交量。越高=量能越集中（主力集中放量），越低=量能越均匀。
+    [新增] price_volume_divergence      量价背离 —— 价格创当日新高/新低时，
+           对应分钟的量是否也创新高/新低。
+           'top_divergence'=顶背离（价新高量不新高），
+           'bottom_divergence'=底背离（价新低量不新低），
+           'no_divergence'=无背离，None=无法判断。
+    [新增] wave_morning   早盘30分钟量占比（移植 yaox v3.0 量波特征）。
+    [新增] wave_close     尾盘30分钟量占比（移植 yaox v3.0，与 tail_ratio 相同口径）。
+    [新增] wave_pulses    脉冲数 —— 量>均量×2 的分钟数（移植 yaox v3.0）。
+    设计原则：全部只记录不入投票，榨干1分钟数据的每一滴信息。
+
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
     - 从 scripts/ 移到 src/analysis/，支持模块导入 + 脚本运行
@@ -165,6 +180,11 @@ INDEX_CODES = {"sh000001", "sz399001", "sz399006"}
 
 # --- v2.7 大盘量比参数 ---
 MARKET_VOL_LOOKBACK = 5  # 大盘量比的回看天数（过去5日平均成交量）
+
+# --- v2.8 新参数：榨干1分钟数据 ---
+VOLUME_PEAK_TOP_N = 3    # 量峰集中度：取量最大的N个分钟
+WAVE_SURGE_RATIO = 2.0   # 脉冲数判定：量 > 均量 × 此值
+DIVERGENCE_LOOKBACK = 30  # 量价背离：判断量是否创新高/新低时的回看分钟数
 
 
 # ---------------------------------------------------------------------------
@@ -895,6 +915,12 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     # --- v2.5 新增：分时形态识别（只记录，不入投票） ---
     pattern_stats = compute_pattern_stats(bars, prev_close)
 
+    # --- v2.8 新增：榨干1分钟数据 ---
+    ma_vol_ratio = compute_morning_afternoon_vol_ratio(bars, volumes)
+    vol_peak_conc = compute_volume_peak_concentration(volumes)
+    pv_divergence = compute_price_volume_divergence(bars, volumes)
+    wave_features = compute_wave_features(bars, volumes, vol_mean)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -968,6 +994,13 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'pm_reversal': pm_reversal,
         # --- v2.7 新增：大盘量比 ---
         'market_vol_ratio': market_vol_ratio,
+        # --- v2.8 新增：榨干1分钟数据 ---
+        'morning_afternoon_vol_ratio': ma_vol_ratio,
+        'volume_peak_concentration': vol_peak_conc,
+        'price_volume_divergence': pv_divergence,
+        'wave_morning': wave_features['wave_morning'] if wave_features else None,
+        'wave_close': wave_features['wave_close'] if wave_features else None,
+        'wave_pulses': wave_features['wave_pulses'] if wave_features else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1112,6 +1145,28 @@ def print_summary(stats: dict):
     if stats.get('mvr_n'):
         print(f'  指标均值: market_vol_ratio={stats["mvr_sum"] / stats["mvr_n"]:.2f} '
               f'(>1放量, <1缩量)')
+    # --- v2.8 新信号均值：榨干1分钟数据 ---
+    if stats.get('mavr_n'):
+        print(f'  指标均值: morning_afternoon_vol_ratio={stats["mavr_sum"] / stats["mavr_n"]:.3f} '
+              f'(>1上午放量, <1下午放量)')
+    if stats.get('vpc_n'):
+        print(f'  指标均值: volume_peak_concentration={stats["vpc_sum"] / stats["vpc_n"]:.3f} '
+              f'(量最大3分钟占比)')
+    if stats.get('wm_n'):
+        print(f'  指标均值: wave_morning={stats["wm_sum"] / stats["wm_n"]:.3f} '
+              f'(早盘30分钟量占比)')
+    if stats.get('wc_n'):
+        print(f'  指标均值: wave_close={stats["wc_sum"] / stats["wc_n"]:.3f} '
+              f'(尾盘30分钟量占比)')
+    if stats.get('wp_n'):
+        print(f'  指标均值: wave_pulses={stats["wp_sum"] / stats["wp_n"]:.1f} 分钟 '
+              f'(量>均量×2)')
+    # v2.8 量价背离分布
+    pvd_counts = stats.get('pvd_counts', {})
+    if pvd_counts:
+        print('  量价背离:')
+        for pvd, cnt in sorted(pvd_counts.items(), key=lambda x: -x[1]):
+            print(f'    {pvd:20s}: {cnt:5d}  ({cnt / n:6.1%})')
     print(f'{line}\n')
 
 
@@ -1257,8 +1312,117 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         if mvr is not None:
             stats['mvr_sum'] += mvr
             stats['mvr_n'] += 1
+        # v2.8 新信号累加
+        for k, v in (('mavr', entry.get('morning_afternoon_vol_ratio')),
+                     ('vpc', entry.get('volume_peak_concentration')),
+                     ('wm', entry.get('wave_morning')),
+                     ('wc', entry.get('wave_close')),
+                     ('wp', entry.get('wave_pulses'))):
+            if v is not None:
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
+        pvd = entry.get('price_volume_divergence')
+        if pvd:
+            stats['pvd_counts'][pvd] = stats['pvd_counts'].get(pvd, 0) + 1
 
     return entries
+
+
+# ---------------------------------------------------------------------------
+# v2.8 新增：榨干1分钟数据——上下午量比+量峰集中度+量价背离+量波特征
+# ---------------------------------------------------------------------------
+
+def compute_morning_afternoon_vol_ratio(bars, volumes):
+    """v2.8 上下午量比 = 上午成交量 / 下午成交量。
+    上午 = 前120分钟（09:30-11:30），下午 = 后120分钟（13:00-15:00）。
+    >1=上午放量，<1=下午放量。
+    """
+    if not bars or len(bars) < 10:
+        return None
+    n = len(bars)
+    mid = n // 2  # 简化：用中间位置分割（实际应按时间，但1分钟数据基本是240根）
+    morning_vol = sum(volumes[:mid])
+    afternoon_vol = sum(volumes[mid:])
+    if afternoon_vol <= 0:
+        return None
+    return round(morning_vol / afternoon_vol, 3)
+
+
+def compute_volume_peak_concentration(volumes):
+    """v2.8 量峰集中度 = 量最大的N个分钟成交量之和 / 全天总成交量。
+    越高=量能越集中（主力集中放量），越低=量能越均匀。
+    """
+    if not volumes or sum(volumes) <= 0:
+        return None
+    total = sum(volumes)
+    top_n = sorted(volumes, reverse=True)[:VOLUME_PEAK_TOP_N]
+    return round(sum(top_n) / total, 3)
+
+
+def compute_price_volume_divergence(bars, volumes):
+    """v2.8 量价背离检测。
+    顶背离：价格创当日新高时，对应分钟的量没有超过过去DIVERGENCE_LOOKBACK分钟的均量。
+    底背离：价格创当日新低时，对应分钟的量没有超过过去DIVERGENCE_LOOKBACK分钟的均量。
+    返回：'top_divergence' / 'bottom_divergence' / 'no_divergence' / None
+    """
+    if not bars or len(bars) < DIVERGENCE_LOOKBACK + 5:
+        return None
+    closes = [b['close'] for b in bars]
+    n = len(bars)
+
+    # 找当日最高价和最低价出现的位置
+    high_idx = closes.index(max(closes))
+    low_idx = closes.index(min(closes))
+
+    def vol_surges_at(idx):
+        """判断 idx 位置的量是否超过过去 lookback 分钟的均量。"""
+        if idx < DIVERGENCE_LOOKBACK:
+            return None  # 数据不足
+        lookback_vol = volumes[idx - DIVERGENCE_LOOKBACK:idx]
+        if not lookback_vol or sum(lookback_vol) <= 0:
+            return None
+        avg_lookback = sum(lookback_vol) / len(lookback_vol)
+        return volumes[idx] > avg_lookback * 1.0  # 量是否放大
+
+    top_divergence = False
+    bottom_divergence = False
+
+    high_vol_surge = vol_surges_at(high_idx)
+    if high_vol_surge is False:
+        top_divergence = True  # 价新高但量不新高
+
+    low_vol_surge = vol_surges_at(low_idx)
+    if low_vol_surge is False:
+        bottom_divergence = True  # 价新低但量不新低
+
+    if top_divergence and bottom_divergence:
+        # 两者都有，优先标顶背离（更常见）
+        return 'top_divergence'
+    elif top_divergence:
+        return 'top_divergence'
+    elif bottom_divergence:
+        return 'bottom_divergence'
+    else:
+        return 'no_divergence'
+
+
+def compute_wave_features(bars, volumes, vol_mean):
+    """v2.8 量波特征（移植 yaox v3.0）。
+    wave_morning：早盘30分钟量占比
+    wave_close：尾盘30分钟量占比
+    wave_pulses：脉冲数（量 > 均量×WAVE_SURGE_RATIO 的分钟数）
+    """
+    if not bars or not volumes or sum(volumes) <= 0:
+        return None
+    total_v = sum(volumes)
+    wave_morning = round(sum(volumes[:30]) / total_v, 3) if len(volumes) >= 30 else None
+    wave_close = round(sum(volumes[-30:]) / total_v, 3) if len(volumes) >= 30 else None
+    wave_pulses = sum(1 for v in volumes if v > vol_mean * WAVE_SURGE_RATIO) if vol_mean > 0 else 0
+    return {
+        'wave_morning': wave_morning,
+        'wave_close': wave_close,
+        'wave_pulses': wave_pulses,
+    }
 
 
 def load_market_volume(kline_dir_path: Path = None) -> dict:
@@ -1346,7 +1510,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v2.7（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v2.8（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -1368,9 +1532,13 @@ def main():
         'vhr_sum', 'vhr_n', 'ws_sum', 'ws_n', 'pmr_sum', 'pmr_n',
         # v2.7 新增：大盘量比
         'mvr_sum', 'mvr_n',
+        # v2.8 新增：榨干1分钟数据
+        'mavr_sum', 'mavr_n', 'vpc_sum', 'vpc_n',
+        'wm_sum', 'wm_n', 'wc_sum', 'wc_n', 'wp_sum', 'wp_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
+    stats['pvd_counts'] = {}      # v2.8 量价背离分布统计
 
     kline_1min_dir = min1_dir()  # 经目录宪法
     if not kline_1min_dir.exists():
