@@ -76,10 +76,10 @@
       "is_signal": true,
       "match_criteria": "A",
       "values": {
-        "V_t": 125000000,
-        "HHV_10": 125000000,
-        "MA3": 60000000,
-        "ratio_to_MA3": 2.08
+        "v_t": 125000000,
+        "hhv_10": 125000000,
+        "ma3": 60000000,
+        "ratio_to_ma3": 2.08
       },
       "confirmation_date": "2026-10-05",
       "data_quality": "valid"
@@ -193,8 +193,8 @@
       "is_signal": true,
       "match_criteria": "A",
       "values": {
-        "V_t": 8000000,
-        "LLV_10": 8000000,
+        "v_t": 8000000,
+        "llv_10": 8000000,
         "shrink_days": 3,
         "extreme_shrink": false,
         "needs_human_review": false
@@ -311,11 +311,11 @@
       "date": "2026-10-05",
       "is_signal": true,
       "values": {
-        "V_t": 120000000,
-        "V_t_1": 55000000,
+        "v_t": 120000000,
+        "v_t_1": 55000000,
         "volume_ratio": 2.18,
-        "C_t": 15.20,
-        "C_t_1": 14.50,
+        "c_t": 15.20,
+        "c_t_1": 14.50,
         "price_change_pct": 4.83
       },
       "confirmation_date": "2026-10-05",
@@ -430,9 +430,9 @@
       "date": "2026-10-05",
       "is_signal": true,
       "values": {
-        "V_t": 50500000,
-        "V_t_1": 50000000,
-        "V_t_2": 49800000,
+        "v_t": 50500000,
+        "v_t_1": 50000000,
+        "v_t_2": 49800000,
         "ratio_t_t1": 1.01,
         "ratio_t1_t2": 1.004,
         "consecutive_count": 2
@@ -547,9 +547,9 @@
       "date": "2026-10-05",
       "is_signal": true,
       "values": {
-        "V_t": 30000000,
-        "V_t_1": 40000000,
-        "V_t_2": 55000000,
+        "v_t": 30000000,
+        "v_t_1": 40000000,
+        "v_t_2": 55000000,
         "shrink_ratio_t": 0.75,
         "shrink_ratio_t1": 0.727,
         "consecutive_count": 3,
@@ -667,9 +667,9 @@
       "date": "2026-10-05",
       "is_signal": true,
       "values": {
-        "V_t": 55000000,
-        "V_t_1": 40000000,
-        "V_t_2": 30000000,
+        "v_t": 55000000,
+        "v_t_1": 40000000,
+        "v_t_2": 30000000,
         "increase_ratio_t": 1.375,
         "increase_ratio_t1": 1.333,
         "consecutive_count": 3
@@ -824,16 +824,16 @@
       "strength": "strong",
       "base_pillar_type": "double_volume",
       "values": {
-        "base_V": 120000000,
-        "base_C": 15.20,
-        "base_O": 14.50,
+        "base_v": 120000000,
+        "base_c": 15.20,
+        "base_o": 14.50,
         "base_real_top": 15.20,
-        "day1_V": 90000000,
-        "day1_C": 15.35,
-        "day2_V": 75000000,
-        "day2_C": 15.50,
-        "day3_V": 60000000,
-        "day3_C": 15.80,
+        "day1_v": 90000000,
+        "day1_c": 15.35,
+        "day2_v": 75000000,
+        "day2_c": 15.50,
+        "day3_v": 60000000,
+        "day3_c": 15.80,
         "avg_close_after": 15.55,
         "min_low_after": 15.25,
         "close_avg_hold": true,
