@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.9（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.0（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -111,6 +111,28 @@ v2.9 相对 v2.8 的变更（继续深挖——5个新字段）：
     [新增] gap_filled           开盘缺口是否回补。
            True=日内价格触及开盘价（缺口回补），False=未回补，None=无缺口。
     设计原则：全部只记录不入投票，继续榨干1分钟数据。
+
+v3.0 相对 v2.9 的变更（里程碑版本——8个信号12个字段，含国泰君安研报验证因子）：
+    [新增] return_skewness        1分钟收益率偏度。国泰君安金工研报验证：
+           在5个指数成分股内都被选用的有效因子。正偏=大涨分钟多，负偏=大跌分钟多。
+    [新增] return_kurtosis        1分钟收益率峰度。国泰君安研报验证有效。
+           高峰度=极端涨跌分钟多（尖峰厚尾），低峰度=均匀分布。
+    [新增] downside_vol_ratio     下行波动率占比。国泰君安研报验证有效。
+           = 下跌分钟收益率标准差 / 全部分钟收益率标准差。衡量下跌风险占比。
+    [新增] vwap_cross_count       VWAP穿越次数。多家机构验证：趋势日穿越0-1次，
+           震荡日穿越多次。区分趋势日/震荡日的关键指标。
+    [新增] price_path_efficiency  价格路径效率比 = |收盘-开盘| / Σ(|每分钟收盘变化|)。
+           =1=直线趋势，→0=剧烈震荡。与VWAP穿越次数互补的趋势纯度指标。
+    [新增] max_consecutive_up     最大连续上涨分钟数。衡量多头趋势强度。
+    [新增] max_consecutive_down   最大连续下跌分钟数。衡量空头趋势强度。
+    [新增] 量价四象限分钟数（4个字段）：
+           vol_up_price_up_minutes     量增价涨分钟数（健康上涨）
+           vol_down_price_up_minutes   量缩价涨分钟数（惜售/顶背离）
+           vol_up_price_down_minutes   量增价跌分钟数（放量下跌/出货）
+           vol_down_price_down_minutes 量缩价跌分钟数（缩量下跌/洗盘）
+    设计原则：全部只记录不入投票，榨干1分钟数据的每一滴信息。
+    特别说明：偏度/峰度/下行波动率占比三个因子经国泰君安2023年11月金工研报
+    《基于分钟数据的高频因子选股效果研究》验证，在5个指数成分股内都被选用。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -941,6 +963,15 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     up_down_ratio = compute_up_down_minute_ratio(bars)
     gap_filled = compute_gap_filled(bars, prev_close)
 
+    # --- v3.0 新增：里程碑版本——国泰君安验证因子+趋势纯度+量价四象限 ---
+    ret_skew = compute_return_skewness(bars)
+    ret_kurt = compute_return_kurtosis(bars)
+    down_vol_ratio = compute_downside_vol_ratio(bars)
+    vwap_cross = compute_vwap_cross_count(bars, volumes)
+    path_eff = compute_price_path_efficiency(bars)
+    max_consec = compute_max_consecutive(bars)
+    quadrants = compute_volume_price_quadrants(bars, volumes)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1027,6 +1058,18 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'realized_volatility': real_vol,
         'up_down_minute_ratio': up_down_ratio,
         'gap_filled': gap_filled,
+        # --- v3.0 新增：里程碑版本——国泰君安验证因子+趋势纯度+量价四象限 ---
+        'return_skewness': ret_skew,
+        'return_kurtosis': ret_kurt,
+        'downside_vol_ratio': down_vol_ratio,
+        'vwap_cross_count': vwap_cross,
+        'price_path_efficiency': path_eff,
+        'max_consecutive_up': max_consec[0],
+        'max_consecutive_down': max_consec[1],
+        'vol_up_price_up_minutes': quadrants[0],
+        'vol_down_price_up_minutes': quadrants[1],
+        'vol_up_price_down_minutes': quadrants[2],
+        'vol_down_price_down_minutes': quadrants[3],
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1209,6 +1252,37 @@ def print_summary(stats: dict):
     if stats.get('gf_n'):
         gf_rate = stats['gf_sum'] / stats['gf_n']
         print(f'  缺口回补率: {gf_rate:.1%} ({stats["gf_sum"]}/{stats["gf_n"]})')
+    # --- v3.0 新信号均值：里程碑版本 ---
+    if stats.get('skew_n'):
+        print(f'  指标均值: return_skewness={stats["skew_sum"] / stats["skew_n"]:+.4f} '
+              f'(正偏=大涨分钟多, 负偏=大跌分钟多) [国泰君安验证]')
+    if stats.get('kurt_n'):
+        print(f'  指标均值: return_kurtosis={stats["kurt_sum"] / stats["kurt_n"]:.4f} '
+              f'(>3尖峰厚尾, =3正态) [国泰君安验证]')
+    if stats.get('dvr_n'):
+        print(f'  指标均值: downside_vol_ratio={stats["dvr_sum"] / stats["dvr_n"]:.4f} '
+              f'(>0.5下跌波动主导) [国泰君安验证]')
+    if stats.get('vcc_n'):
+        print(f'  指标均值: vwap_cross_count={stats["vcc_sum"] / stats["vcc_n"]:.1f} 次 '
+              f'(趋势日0-1次, 震荡日多次)')
+    if stats.get('ppe_n'):
+        print(f'  指标均值: price_path_efficiency={stats["ppe_sum"] / stats["ppe_n"]:.4f} '
+              f'(=1直线趋势, →0剧烈震荡)')
+    if stats.get('mcu_n'):
+        print(f'  指标均值: max_consecutive_up={stats["mcu_sum"] / stats["mcu_n"]:.1f} 分钟 '
+              f'(最大连续上涨)')
+    if stats.get('mcd_n'):
+        print(f'  指标均值: max_consecutive_down={stats["mcd_sum"] / stats["mcd_n"]:.1f} 分钟 '
+              f'(最大连续下跌)')
+    # v3.0 量价四象限
+    if stats.get('vupu_n'):
+        total_q = (stats['vupu_sum'] + stats['vdpu_sum'] +
+                   stats['vupd_sum'] + stats['vdpd_sum'])
+        if total_q > 0:
+            print(f'  量价四象限(分钟数): 量增价涨={stats["vupu_sum"]:.0f}({stats["vupu_sum"]/total_q:.0%}), '
+                  f'量缩价涨={stats["vdpu_sum"]:.0f}({stats["vdpu_sum"]/total_q:.0%}), '
+                  f'量增价跌={stats["vupd_sum"]:.0f}({stats["vupd_sum"]/total_q:.0%}), '
+                  f'量缩价跌={stats["vdpd_sum"]:.0f}({stats["vdpd_sum"]/total_q:.0%})')
     print(f'{line}\n')
 
 
@@ -1378,6 +1452,21 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         if gf is not None:
             stats['gf_sum'] += 1 if gf else 0
             stats['gf_n'] += 1
+        # v3.0 新信号累加
+        for k, v in (('skew', entry.get('return_skewness')),
+                     ('kurt', entry.get('return_kurtosis')),
+                     ('dvr', entry.get('downside_vol_ratio')),
+                     ('vcc', entry.get('vwap_cross_count')),
+                     ('ppe', entry.get('price_path_efficiency')),
+                     ('mcu', entry.get('max_consecutive_up')),
+                     ('mcd', entry.get('max_consecutive_down')),
+                     ('vupu', entry.get('vol_up_price_up_minutes')),
+                     ('vdpu', entry.get('vol_down_price_up_minutes')),
+                     ('vupd', entry.get('vol_up_price_down_minutes')),
+                     ('vdpd', entry.get('vol_down_price_down_minutes'))):
+            if v is not None:
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
 
     return entries
 
@@ -1586,6 +1675,194 @@ def compute_gap_filled(bars, prev_close):
         return None  # 无缺口
 
 
+# ---------------------------------------------------------------------------
+# v3.0 新增：里程碑版本——国泰君安研报验证因子 + 趋势纯度 + 量价四象限
+# ---------------------------------------------------------------------------
+
+def _compute_returns(bars):
+    """计算1分钟收益率序列。"""
+    if not bars or len(bars) < 2:
+        return []
+    closes = [b['close'] for b in bars]
+    returns = []
+    for i in range(1, len(closes)):
+        if closes[i - 1] > 0:
+            returns.append(closes[i] / closes[i - 1] - 1)
+    return returns
+
+
+def compute_return_skewness(bars):
+    """v3.0 1分钟收益率偏度。
+    国泰君安金工研报验证：在5个指数成分股内都被选用的有效因子。
+    偏度 = E[(r-μ)^3] / σ^3
+    正偏=大涨分钟多（右尾厚），负偏=大跌分钟多（左尾厚）。
+    """
+    returns = _compute_returns(bars)
+    if len(returns) < 10:
+        return None
+    n = len(returns)
+    mean_r = sum(returns) / n
+    variance = sum((r - mean_r) ** 2 for r in returns) / n
+    if variance <= 0:
+        return 0.0
+    std_r = math.sqrt(variance)
+    skewness = sum((r - mean_r) ** 3 for r in returns) / n / (std_r ** 3)
+    return round(skewness, 4)
+
+
+def compute_return_kurtosis(bars):
+    """v3.0 1分钟收益率峰度（原始峰度，非超额峰度）。
+    国泰君安研报验证有效。
+    峰度 = E[(r-μ)^4] / σ^4
+    正态分布峰度=3。>3=尖峰厚尾（极端涨跌分钟多），<3=均匀分布。
+    """
+    returns = _compute_returns(bars)
+    if len(returns) < 10:
+        return None
+    n = len(returns)
+    mean_r = sum(returns) / n
+    variance = sum((r - mean_r) ** 2 for r in returns) / n
+    if variance <= 0:
+        return None
+    std_r = math.sqrt(variance)
+    kurtosis = sum((r - mean_r) ** 4 for r in returns) / n / (std_r ** 4)
+    return round(kurtosis, 4)
+
+
+def compute_downside_vol_ratio(bars):
+    """v3.0 下行波动率占比。
+    国泰君安研报验证有效。
+    = 下跌分钟收益率标准差 / 全部分钟收益率标准差。
+    衡量下跌风险占比。>0.5=下跌波动大于上涨波动（空头主导）。
+    """
+    returns = _compute_returns(bars)
+    if len(returns) < 10:
+        return None
+    all_var = sum((r - sum(returns) / len(returns)) ** 2 for r in returns) / len(returns)
+    if all_var <= 0:
+        return None
+    down_returns = [r for r in returns if r < 0]
+    if len(down_returns) < 3:
+        return 0.0  # 几乎没有下跌分钟
+    down_mean = sum(down_returns) / len(down_returns)
+    down_var = sum((r - down_mean) ** 2 for r in down_returns) / len(down_returns)
+    return round(math.sqrt(down_var) / math.sqrt(all_var), 4)
+
+
+def compute_vwap_cross_count(bars, volumes):
+    """v3.0 VWAP穿越次数。
+    多家机构验证：趋势日穿越0-1次，震荡日穿越多次。
+    计算每分钟的累计VWAP，统计价格（收盘价）从上到下或从下到上穿越VWAP的次数。
+    """
+    if not bars or not volumes or len(bars) < 10 or sum(volumes) <= 0:
+        return None
+    closes = [b['close'] for b in bars]
+    cum_pv = 0.0
+    cum_v = 0.0
+    cross_count = 0
+    prev_side = 0  # 1=价格在VWAP上方, -1=下方, 0=等于/初始
+
+    for i in range(len(bars)):
+        cum_pv += closes[i] * volumes[i]
+        cum_v += volumes[i]
+        if cum_v <= 0:
+            continue
+        vwap = cum_pv / cum_v
+        if closes[i] > vwap:
+            side = 1
+        elif closes[i] < vwap:
+            side = -1
+        else:
+            side = 0  # 正好等于VWAP，不改变方向
+
+        if side != 0 and prev_side != 0 and side != prev_side:
+            cross_count += 1
+        if side != 0:
+            prev_side = side
+
+    return cross_count
+
+
+def compute_price_path_efficiency(bars):
+    """v3.0 价格路径效率比。
+    = |收盘 - 开盘| / Σ(|每分钟收盘价变化|)
+    =1=直线运动（完美趋势日），→0=剧烈震荡后回到原点（完美震荡日）。
+    与VWAP穿越次数互补的趋势纯度指标。
+    """
+    if not bars or len(bars) < 2:
+        return None
+    closes = [b['close'] for b in bars]
+    open_price = bars[0].get('open', closes[0])
+    close_price = closes[-1]
+    displacement = abs(close_price - open_price)
+    path_length = sum(abs(closes[i] - closes[i - 1]) for i in range(1, len(closes)))
+    if path_length <= 0:
+        return 1.0 if displacement == 0 else None
+    return round(displacement / path_length, 4)
+
+
+def compute_max_consecutive(bars):
+    """v3.0 最大连续上涨/下跌分钟数。
+    上涨 = close[i] > close[i-1]，下跌 = close[i] < close[i-1]，平盘 = 不计数（中断连续）。
+    返回 (max_up, max_down)。
+    """
+    if not bars or len(bars) < 2:
+        return (0, 0)
+    closes = [b['close'] for b in bars]
+    max_up = 0
+    max_down = 0
+    cur_up = 0
+    cur_down = 0
+    for i in range(1, len(closes)):
+        if closes[i] > closes[i - 1]:
+            cur_up += 1
+            cur_down = 0
+            max_up = max(max_up, cur_up)
+        elif closes[i] < closes[i - 1]:
+            cur_down += 1
+            cur_up = 0
+            max_down = max(max_down, cur_down)
+        else:
+            cur_up = 0
+            cur_down = 0
+    return (max_up, max_down)
+
+
+def compute_volume_price_quadrants(bars, volumes):
+    """v3.0 量价四象限分钟数。
+    对每分钟（从第2分钟开始），判断量和价的变化方向：
+    - 量增 = volume[i] > volume[i-1]，量缩 = volume[i] < volume[i-1]
+    - 价涨 = close[i] > close[i-1]，价跌 = close[i] < close[i-1]
+    四个象限：
+    - vol_up_price_up: 量增价涨（健康上涨）
+    - vol_down_price_up: 量缩价涨（惜售/顶背离）
+    - vol_up_price_down: 量增价跌（放量下跌/出货）
+    - vol_down_price_down: 量缩价跌（缩量下跌/洗盘）
+    平量或平价的分钟不计入任何象限。
+    """
+    if not bars or not volumes or len(bars) < 2:
+        return (0, 0, 0, 0)
+    closes = [b['close'] for b in bars]
+    vupu = 0  # 量增价涨
+    vdpu = 0  # 量缩价涨
+    vupd = 0  # 量增价跌
+    vdpd = 0  # 量缩价跌
+    for i in range(1, len(bars)):
+        vol_change = volumes[i] - volumes[i - 1]
+        price_change = closes[i] - closes[i - 1]
+        if vol_change == 0 or price_change == 0:
+            continue  # 平量或平价，不计入
+        if vol_change > 0 and price_change > 0:
+            vupu += 1
+        elif vol_change < 0 and price_change > 0:
+            vdpu += 1
+        elif vol_change > 0 and price_change < 0:
+            vupd += 1
+        elif vol_change < 0 and price_change < 0:
+            vdpd += 1
+    return (vupu, vdpu, vupd, vdpd)
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -1671,7 +1948,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v2.9（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.0（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -1699,6 +1976,12 @@ def main():
         # v2.9 新增：继续深挖
         'cia_sum', 'cia_n', 'vd_sum', 'vd_n', 'rv_sum', 'rv_n',
         'udr_sum', 'udr_n', 'gf_sum', 'gf_n',
+        # v3.0 新增：里程碑版本——国泰君安验证因子+趋势纯度+量价四象限
+        'skew_sum', 'skew_n', 'kurt_sum', 'kurt_n', 'dvr_sum', 'dvr_n',
+        'vcc_sum', 'vcc_n', 'ppe_sum', 'ppe_n',
+        'mcu_sum', 'mcu_n', 'mcd_sum', 'mcd_n',
+        'vupu_sum', 'vupu_n', 'vdpu_sum', 'vdpu_n',
+        'vupd_sum', 'vupd_n', 'vdpd_sum', 'vdpd_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计

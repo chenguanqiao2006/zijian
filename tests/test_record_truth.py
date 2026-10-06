@@ -40,6 +40,9 @@ from src.analysis.record_truth import (
     compute_price_volume_divergence, compute_wave_features,
     compute_close_in_amplitude, compute_vwap_deviation,
     compute_realized_volatility, compute_up_down_minute_ratio, compute_gap_filled,
+    compute_return_skewness, compute_return_kurtosis, compute_downside_vol_ratio,
+    compute_vwap_cross_count, compute_price_path_efficiency,
+    compute_max_consecutive, compute_volume_price_quadrants,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1144,6 +1147,166 @@ class TestV29Deeper:
         assert entry is not None
         for field in ('close_in_amplitude', 'vwap_deviation', 'realized_volatility',
                       'up_down_minute_ratio', 'gap_filled'):
+            assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v3.0 新信号：里程碑版本——国泰君安验证因子+趋势纯度+量价四象限
+# ---------------------------------------------------------------------------
+
+class TestV30Milestone:
+    def test_return_skewness_positive(self):
+        # 正偏：大涨分钟多（右尾厚）
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i % 10 == 0 and i > 0:
+                b['close'] = b['close'] + 2.0  # 偶尔大涨
+            else:
+                b['close'] = b['close'] - 0.05  # 平时小跌
+        skew = compute_return_skewness(bars)
+        assert skew is not None
+        assert skew > 0  # 正偏
+
+    def test_return_skewness_negative(self):
+        # 负偏：大跌分钟多（左尾厚）—— 用绝对价格构造
+        bars = make_bars(n=50, price=100.0, vol=1000.0)
+        # 构造：大部分分钟小涨，偶尔极端大跌
+        prices = [100.0]
+        for i in range(1, 50):
+            if i % 10 == 0:
+                prices.append(prices[-1] - 3.0)  # 极端大跌
+            else:
+                prices.append(prices[-1] + 0.05)  # 小涨
+        for i, b in enumerate(bars):
+            b['close'] = prices[i]
+        skew = compute_return_skewness(bars)
+        assert skew is not None
+        assert skew < 0  # 负偏
+
+    def test_return_kurtosis_high(self):
+        # 高峰度：尖峰厚尾——大部分分钟极小波动（围绕均值），偶尔极端波动
+        bars = make_bars(n=50, price=100.0, vol=1000.0)
+        # 构造收益率：45个极小波动(±0.001交替) + 5个极端波动(±0.05)
+        returns = []
+        for i in range(50):
+            if i % 10 == 0:
+                returns.append(0.05)   # 极端大涨
+            elif i % 10 == 5:
+                returns.append(-0.05)  # 极端大跌
+            else:
+                returns.append(0.001 if i % 2 == 0 else -0.001)  # 极小波动
+        # 转换为价格序列
+        prices = [100.0]
+        for r in returns:
+            prices.append(prices[-1] * (1 + r))
+        for i, b in enumerate(bars):
+            b['close'] = prices[i]
+        kurt = compute_return_kurtosis(bars)
+        assert kurt is not None
+        assert kurt > 3  # 尖峰厚尾
+
+    def test_downside_vol_ratio(self):
+        # 下行波动率占比基本功能
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 3 - 1) * 0.5
+        dvr = compute_downside_vol_ratio(bars)
+        assert dvr is not None
+        assert 0 <= dvr <= 1.5  # 合理范围
+
+    def test_vwap_cross_count_trend_day(self):
+        # 趋势日：价格持续在VWAP一侧，穿越次数少
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.1  # 持续上涨
+            b['volume'] = volumes[i]
+        cross = compute_vwap_cross_count(bars, volumes)
+        assert cross is not None
+        assert cross <= 5  # 趋势日穿越少
+
+    def test_vwap_cross_count_range_day(self):
+        # 震荡日：价格围绕VWAP震荡，穿越次数多
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 10 - 5) * 0.2  # 围绕100震荡
+            b['volume'] = volumes[i]
+        cross = compute_vwap_cross_count(bars, volumes)
+        assert cross is not None
+        assert cross >= 3  # 震荡日穿越多
+
+    def test_price_path_efficiency_high(self):
+        # 高效率：价格直线运动
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.1  # 直线上涨
+        eff = compute_price_path_efficiency(bars)
+        assert eff is not None
+        assert eff > 0.8  # 高效率
+
+    def test_price_path_efficiency_low(self):
+        # 低效率：价格剧烈震荡后回到原点
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 4 - 1.5) * 1.0  # 剧烈震荡
+        eff = compute_price_path_efficiency(bars)
+        assert eff is not None
+        assert eff < 0.3  # 低效率
+
+    def test_max_consecutive_up(self):
+        # 最大连续上涨——构造干净的连续上涨段（前后平盘，不下跌）
+        bars = make_bars(n=20, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i < 5:
+                b['close'] = 100.0  # 平盘
+            elif 5 <= i <= 13:  # 第5到13根，连续9根上涨
+                b['close'] = 100.0 + (i - 4) * 0.1  # i=5→100.1, i=13→100.9
+            else:
+                b['close'] = 100.9  # 平盘（保持在最高位100.9，不下跌）
+        max_up, max_down = compute_max_consecutive(bars)
+        assert max_up >= 8  # 至少连续8分钟上涨
+        assert max_down == 0  # 没有下跌分钟
+
+    def test_volume_price_quadrants(self):
+        # 量价四象限基本功能
+        bars = make_bars(n=20, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 20
+        for i in range(1, 20):
+            if i % 4 == 1:  # 量增价涨
+                volumes[i] = 1500.0
+                bars[i]['close'] = 101.0
+            elif i % 4 == 2:  # 量缩价涨
+                volumes[i] = 500.0
+                bars[i]['close'] = 102.0
+            elif i % 4 == 3:  # 量增价跌
+                volumes[i] = 1500.0
+                bars[i]['close'] = 101.0
+            else:  # 量缩价跌
+                volumes[i] = 500.0
+                bars[i]['close'] = 100.0
+        vupu, vdpu, vupd, vdpd = compute_volume_price_quadrants(bars, volumes)
+        total = vupu + vdpu + vupd + vdpd
+        assert total > 0
+        assert vupu > 0 and vdpu > 0 and vupd > 0 and vdpd > 0
+
+    def test_analyze_day_v30_fields(self):
+        # analyze_day 返回值包含 v3.0 字段（12个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        v30_fields = (
+            'return_skewness', 'return_kurtosis', 'downside_vol_ratio',
+            'vwap_cross_count', 'price_path_efficiency',
+            'max_consecutive_up', 'max_consecutive_down',
+            'vol_up_price_up_minutes', 'vol_down_price_up_minutes',
+            'vol_up_price_down_minutes', 'vol_down_price_down_minutes',
+        )
+        for field in v30_fields:
             assert field in entry, f'缺少字段: {field}'
 
 
