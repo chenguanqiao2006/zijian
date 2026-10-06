@@ -87,6 +87,11 @@ def universe_path() -> Path:
     return universe_dir() / 'hushen300.json'
 
 
+def all_market_path() -> Path:
+    """全市场A股缓存文件 data/universe/all_market.json（沪市+深市，不含北交所）。"""
+    return universe_dir() / 'all_market.json'
+
+
 def ledger_path(month: str) -> Path:
     """真假账本月分片文件 data/analysis/truth_ledger/{YYYY-MM}.json。"""
     if not _MONTH_RE.match(month or ''):

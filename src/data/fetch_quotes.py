@@ -40,7 +40,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # src/
-from data.paths import kline_path, min1_path, universe_path, validate_code, self_check as paths_self_check
+from data.paths import kline_path, min1_path, universe_path, all_market_path, validate_code, self_check as paths_self_check
 from data import validator as data_validator
 from data import status as data_status
 from data.logger import get_logger
@@ -358,6 +358,80 @@ def get_1min_universe():
     return codes
 
 
+def load_all_market():
+    """加载全市场A股（沪市+深市，坚决排除北交所）。优先读缓存。
+
+    数据源优先级：上交所官网 → 深交所官网 → 东方财富（备用）。
+    缓存文件：data/universe/all_market.json
+    """
+    cache = all_market_path()
+    if cache.exists():
+        try:
+            arr = json.loads(cache.read_text(encoding='utf-8'))
+            if isinstance(arr, list) and arr:
+                out = [c for c in arr if not is_bj(c)]
+                if out:
+                    return out
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+
+    codes = set()
+    try:
+        import akshare as ak
+
+        # 上交所（6开头）
+        try:
+            df_sh = ak.stock_info_sh_name_code()
+            col = next((c for c in df_sh.columns if '代码' in str(c)), None)
+            if col:
+                for x in df_sh[col].tolist():
+                    s = re.sub(r'[^0-9]', '', str(x))
+                    if len(s) == 6 and s.startswith('6'):
+                        codes.add('sh' + s)
+                log.info(f'上交所股票: {len([c for c in codes if c.startswith("sh")])} 只')
+        except Exception as e:
+            log.warn(f'上交所股票列表拉取失败: {e}')
+
+        # 深交所（0/3开头）
+        try:
+            df_sz = ak.stock_info_sz_name_code()
+            col = next((c for c in df_sz.columns if '代码' in str(c)), None)
+            if col:
+                for x in df_sz[col].tolist():
+                    s = re.sub(r'[^0-9]', '', str(x))
+                    if len(s) == 6 and s.startswith(('0', '3')):
+                        codes.add('sz' + s)
+                log.info(f'深交所股票: {len([c for c in codes if c.startswith("sz")])} 只')
+        except Exception as e:
+            log.warn(f'深交所股票列表拉取失败: {e}')
+
+        # 备用：东方财富实时行情（如果前两个加起来太少）
+        if len(codes) < 2000:
+            try:
+                df = ak.stock_zh_a_spot_em()
+                for _, row in df.iterrows():
+                    s = str(row.get('代码', ''))
+                    if len(s) == 6:
+                        if s.startswith('6'):
+                            codes.add('sh' + s)
+                        elif s.startswith(('0', '3')):
+                            codes.add('sz' + s)
+                log.info(f'东方财富补充后: {len(codes)} 只')
+            except Exception as e:
+                log.warn(f'东方财富股票列表拉取失败: {e}')
+
+    except Exception as e:
+        log.error(f'全市场股票列表加载异常: {e}')
+
+    out = sorted(c for c in codes if not is_bj(c))
+    if out:
+        save_json(cache, out)
+        log.info(f'全市场A股已缓存: {len(out)} 只（沪市+深市，不含北交所）')
+    else:
+        log.error('全市场股票列表为空，请检查网络或数据源')
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 工作单元
 # ---------------------------------------------------------------------------
@@ -435,9 +509,10 @@ def min1_worker(code):
     return True, src
 
 
-def run_threaded(codes, worker):
+def run_threaded(codes, worker, max_workers=None):
     ok, failed, sources = 0, [], {}
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+    workers = max_workers or MAX_WORKERS
+    with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(worker, c): c for c in codes}
         for fut in as_completed(futs):
             code = futs[fut]
@@ -488,6 +563,9 @@ def run_fetch(args):
     if args.codes:
         codes = [validate_code(c) for c in args.codes if not is_bj(c)]
         log.info(f'指定股票池: {len(codes)} 只')
+    elif getattr(args, 'all_market', False):
+        codes = load_all_market()
+        log.info(f'全市场A股（沪市+深市，不含北交所）: {len(codes)} 只')
     elif args.no_hs300:
         wl = Watchlist()
         codes = [c for c in wl.get_codes() if not is_bj(c)]
@@ -496,24 +574,30 @@ def run_fetch(args):
         codes = get_1min_universe()
         log.info(f'股票池: {len(codes)} 只（自定义+沪深300）')
 
+    all_market_mode = getattr(args, 'all_market', False)
+
     # --- 日线 ---
     if trading and now.weekday() < 5:
         log.info('当前处于 A 股交易时段，跳过日线拉取（避免盘中数据不完整）')
     else:
         log.info(f'日线模式: {"全量重建" if args.full else "增量合并"}（{args.days} 根）')
-        ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
+        workers = 12 if all_market_mode else MAX_WORKERS
+        ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full), max_workers=workers)
         log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
         log.info(f'日线源分布: {sources}')
         if failed:
             log.warn(f'日线失败清单(前20): {", ".join(failed[:20])}')
 
-    # --- 1分钟 ---
-    log.info('1分钟模式: 新浪(多日) → 腾讯(当日) → 东财(多日) 降级')
-    ok, failed, sources = run_threaded(codes, min1_worker)
-    log.info(f'1分钟完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
-    log.info(f'1分钟源分布: {sources}')
-    if failed:
-        log.warn(f'1分钟失败清单(前20): {", ".join(failed[:20])}')
+    # --- 1分钟（全市场模式跳过，数据量太大） ---
+    if all_market_mode:
+        log.info('全市场模式：跳过1分钟拉取（仅拉日线）')
+    else:
+        log.info('1分钟模式: 新浪(多日) → 腾讯(当日) → 东财(多日) 降级')
+        ok, failed, sources = run_threaded(codes, min1_worker)
+        log.info(f'1分钟完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
+        log.info(f'1分钟源分布: {sources}')
+        if failed:
+            log.warn(f'1分钟失败清单(前20): {", ".join(failed[:20])}')
 
     # --- 拉取状态汇总（人类可读，保留 print） ---
     print()
@@ -531,6 +615,7 @@ def main():
     ap.add_argument('--self-check', action='store_true', help='仅运行路径宪法自检')
     ap.add_argument('--watchlist', action='store_true', help='仅打印自定义股票池')
     ap.add_argument('--no-hs300', action='store_true', help='不拉沪深300，只拉自定义股票池')
+    ap.add_argument('--all-market', action='store_true', help='全市场A股日线（沪市+深市，不含北交所，仅拉日线）')
     args = ap.parse_args()
     return run_fetch(args)
 
