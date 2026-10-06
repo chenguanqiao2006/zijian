@@ -80,7 +80,10 @@ def run_pipeline(args) -> int:
         log.info('--- 跳过行情拉取（--skip-fetch） ---')
 
     # --- 第二步：真假量柱分析 ---
-    if not args.skip_analysis:
+    # 全市场模式下只有日线、没有1分钟数据，自动跳过分析
+    if getattr(args, 'all_market', False):
+        log.info('--- 全市场模式：跳过账本分析（仅拉日线） ---')
+    elif not args.skip_analysis:
         log.info('--- 第二步：真假量柱账本分析 ---')
         step_start = time.time()
         analysis_result = run_analysis(args)
@@ -120,6 +123,7 @@ def main():
     ap.add_argument('--self-check', action='store_true', help='仅运行路径宪法自检')
     ap.add_argument('--watchlist', action='store_true', help='仅打印自定义股票池')
     ap.add_argument('--no-hs300', action='store_true', help='不拉沪深300，只拉自定义股票池')
+    ap.add_argument('--all-market', action='store_true', help='全市场A股日线（沪市+深市，不含北交所，仅拉日线，自动跳过分析）')
 
     # 分析相关参数（透传给 record_truth）
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')

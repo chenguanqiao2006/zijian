@@ -18,6 +18,10 @@ on:
         description: '包含沪深300（默认只拉自定义股票池）'
         required: false
         default: 'false'
+      all_market:
+        description: '全市场A股日线（沪市+深市，约4600只，不含北交所，仅拉日线）'
+        required: false
+        default: 'false'
       dry_run:
         description: '试运行（只分析不写账本）'
         required: false
@@ -48,10 +52,13 @@ jobs:
         run: |
           cd src
           ARGS="--no-hs300"
+          if [ "${{ github.event.inputs.all_market }}" = "true" ]; then
+            ARGS="--all-market"
+          fi
           if [ "${{ github.event.inputs.full }}" = "true" ]; then
             ARGS="$ARGS --full"
           fi
-          if [ "${{ github.event.inputs.hs300 }}" = "true" ]; then
+          if [ "${{ github.event.inputs.hs300 }}" = "true" ] && [ "${{ github.event.inputs.all_market }}" != "true" ]; then
             ARGS=$(echo "$ARGS" | sed 's/--no-hs300//')
           fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
