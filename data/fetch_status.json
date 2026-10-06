@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-10-06 18:57:27",
+  "last_run": "2026-10-06 23:35:40",
   "stocks": {
-    "sh601138": {
+    "sz000921": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:12",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
@@ -15,191 +15,107 @@
         "issues": []
       }
     },
-    "sz300394": {
+    "sz000922": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:12",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:21",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sh603283": {
+    "sz000923": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:12",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:21",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sz002156": {
+    "sz000926": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:12",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:21",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sh600584": {
+    "sz000927": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:12",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:22",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sz300476": {
+    "sz000925": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:13",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:27",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sh603516": {
+    "sz000928": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:13",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
           "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:27",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sh601231": {
+    "sz000929": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:13",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
         "date_range": [
-          "2026-04-09",
-          "2026-09-30"
-        ],
-        "is_valid": true,
-        "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:26",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
-        "date_range": [
-          "2026-09-17",
+          "2026-04-08",
           "2026-09-30"
         ],
         "is_valid": true,
         "issues": []
       }
     },
-    "sh000001": {
+    "sz000931": {
       "daily": {
-        "last_fetch": "2026-10-06 18:57:13",
+        "last_fetch": "2026-10-06 23:35:23",
         "source": "腾讯",
         "bar_count": 120,
         "trading_days": null,
@@ -209,14 +125,1444 @@
         ],
         "is_valid": true,
         "issues": []
-      },
-      "min1": {
-        "last_fetch": "2026-10-06 18:57:25",
-        "source": "新浪",
-        "bar_count": 1970,
-        "trading_days": 9,
+      }
+    },
+    "sz000930": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:23",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
         "date_range": [
-          "2026-09-17",
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000933": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:23",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000932": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:23",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000936": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000935": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000938": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000937": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000948": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000949": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000950": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000953": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000951": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000952": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000955": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000957": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000959": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-03-25",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000958": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000960": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000962": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000963": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000965": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:24",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000967": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000966": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000968": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000970": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000969": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000972": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-08",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000973": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000975": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000977": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000981": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000983": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000980": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000988": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000985": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000989": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000990": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:25",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000993": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000995": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000998": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz000999": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001202": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001201": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001203": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001205": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001206": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001207": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001210": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001211": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:26",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001212": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001213": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001215": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001217": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001218": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001219": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001220": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001221": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001222": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001225": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001226": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:27",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001227": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001228": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001229": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001231": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001234": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001236": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001237": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 92,
+        "trading_days": null,
+        "date_range": [
+          "2026-05-22",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001238": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001246": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 1,
+        "trading_days": null,
+        "date_range": [
+          "2026-09-30",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001255": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001248": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:28",
+        "source": "腾讯",
+        "bar_count": 64,
+        "trading_days": null,
+        "date_range": [
+          "2026-07-02",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001257": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001258": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001259": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001266": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001269": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001270": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-08",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001278": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001279": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001282": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:29",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001286": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001287": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001296": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001288": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001289": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001299": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001300": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001301": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001311": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001312": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:30",
+        "source": "腾讯",
+        "bar_count": 112,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-21",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001314": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001317": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001319": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001324": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001325": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001326": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001331": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:31",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-03-10",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001338": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:32",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001359": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:32",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001360": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:32",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001380": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:33",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz001387": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:33",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz002069": {
+      "daily": {
+        "last_fetch": "2026-10-06 23:35:40",
+        "source": "腾讯",
+        "bar_count": 120,
+        "trading_days": null,
+        "date_range": [
+          "2026-04-09",
           "2026-09-30"
         ],
         "is_valid": true,
