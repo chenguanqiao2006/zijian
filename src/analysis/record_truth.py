@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v3.4（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.5（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -191,6 +191,33 @@ v3.4 相对 v3.3 的变更（6时段涨跌幅+量占比单独输出——更细�
     时段6（尾盘后段15分钟，93.75-100%）：session_6_return / session_6_volume_ratio
     切分方式：按K线索引比例切分（不依赖时间戳），数据不足时按实际长度等比缩放。
     设计原则：全部只记录不入投票，从"更细时段"维度榨干1分钟数据。
+
+v3.5 相对 v3.4 的变更（三大高价值方向，22个新字段）：
+
+    【A. 价格路径类——机构高频因子，7字段】
+    [新增] return_autocorr_lag1   1分钟收益率lag-1自相关系数。正=趋势延续，负=反转频繁。
+    [新增] return_autocorr_lag2   lag-2自相关系数。
+    [新增] return_autocorr_lag5   lag-5自相关系数。
+    [新增] max_drawdown            日内最大回撤（%）= 从日内最高点到后续最低点的最大跌幅。
+    [新增] max_drawup              日内最大涨幅（%）= 从日内最低点到后续最高点的最大涨幅。
+    [新增] hurst_exponent          Hurst指数（R/S分析法）。0.5=随机游走，>0.5=趋势性，<0.5=均值回归。
+    [新增] reversal_points         日内反转点数量（局部高点+局部低点）。多=震荡，少=趋势。
+
+    【G. 多周期聚合——不同时间尺度视角，9字段】
+    将1分钟K线聚合为5分/15分/30分钟K线，每个周期输出3个字段：
+    [新增] tf5_up_ratio / tf15_up_ratio / tf30_up_ratio    周期阳线占比
+    [新增] tf5_max_return / tf15_max_return / tf30_max_return  周期单根最大涨跌幅绝对值（%）
+    [新增] tf5_volume_cv / tf15_volume_cv / tf30_volume_cv  周期量的变异系数（量能稳定性）
+
+    【E. K线形态统计——1分钟K线形态分布，6字段】
+    [新增] minute_up_count        1分钟阳线数量（close>open）
+    [新增] minute_down_count      1分钟阴线数量（close<open）
+    [新增] minute_doji_count      1分钟十字星数量（实体<0.05%）
+    [新增] long_upper_shadow_count  长上影分钟数（上影线>实体2倍且实体>0）
+    [新增] long_lower_shadow_count  长下影分钟数（下影线>实体2倍且实体>0）
+    [新增] minute_gap_count       1分钟跳空次数（分钟间开盘价跳空>0.3%）
+
+    设计原则：全部只记录不入投票，三大方向从"价格路径/多周期/形态"维度榨干1分钟数据。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -1043,6 +1070,14 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     # --- v3.4 新增：6时段涨跌幅+量占比单独输出——更细时段切分 ---
     six_sessions = compute_six_sessions(bars, volumes)
 
+    # --- v3.5 新增：三大高价值方向 ---
+    # A. 价格路径类
+    price_path = compute_price_path(bars)
+    # G. 多周期聚合
+    multi_tf = compute_multi_timeframe(bars, volumes)
+    # E. K线形态统计
+    candle_patterns = compute_candle_patterns(bars)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1177,6 +1212,31 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'session_5_volume_ratio': six_sessions['session_5_volume_ratio'] if six_sessions else None,
         'session_6_return': six_sessions['session_6_return'] if six_sessions else None,
         'session_6_volume_ratio': six_sessions['session_6_volume_ratio'] if six_sessions else None,
+        # --- v3.5 新增：A. 价格路径类（7字段） ---
+        'return_autocorr_lag1': price_path[0],
+        'return_autocorr_lag2': price_path[1],
+        'return_autocorr_lag5': price_path[2],
+        'max_drawdown': price_path[3],
+        'max_drawup': price_path[4],
+        'hurst_exponent': price_path[5],
+        'reversal_points': price_path[6],
+        # --- v3.5 新增：G. 多周期聚合（9字段） ---
+        'tf5_up_ratio': multi_tf['tf5_up_ratio'] if multi_tf else None,
+        'tf5_max_return': multi_tf['tf5_max_return'] if multi_tf else None,
+        'tf5_volume_cv': multi_tf['tf5_volume_cv'] if multi_tf else None,
+        'tf15_up_ratio': multi_tf['tf15_up_ratio'] if multi_tf else None,
+        'tf15_max_return': multi_tf['tf15_max_return'] if multi_tf else None,
+        'tf15_volume_cv': multi_tf['tf15_volume_cv'] if multi_tf else None,
+        'tf30_up_ratio': multi_tf['tf30_up_ratio'] if multi_tf else None,
+        'tf30_max_return': multi_tf['tf30_max_return'] if multi_tf else None,
+        'tf30_volume_cv': multi_tf['tf30_volume_cv'] if multi_tf else None,
+        # --- v3.5 新增：E. K线形态统计（6字段） ---
+        'minute_up_count': candle_patterns[0],
+        'minute_down_count': candle_patterns[1],
+        'minute_doji_count': candle_patterns[2],
+        'long_upper_shadow_count': candle_patterns[3],
+        'long_lower_shadow_count': candle_patterns[4],
+        'minute_gap_count': candle_patterns[5],
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1451,6 +1511,39 @@ def print_summary(stats: dict):
         r_avg = stats[f'{r_key}_sum'] / stats[f'{r_key}_n'] if stats.get(f'{r_key}_n') else 0
         vr_avg = stats[f'{vr_key}_sum'] / stats[f'{vr_key}_n'] if stats.get(f'{vr_key}_n') else 0
         print(f'    {name:8s}: 涨跌={r_avg:+.4f}%, 量占比={vr_avg:.1%}')
+    # --- v3.5 A. 价格路径 均值 ---
+    print('  价格路径指标:')
+    if stats.get('ac_lag1_n'):
+        print(f'    收益率自相关: lag1={stats["ac_lag1_sum"]/stats["ac_lag1_n"]:+.4f}, '
+              f'lag2={stats["ac_lag2_sum"]/stats["ac_lag2_n"]:+.4f}, '
+              f'lag5={stats["ac_lag5_sum"]/stats["ac_lag5_n"]:+.4f} '
+              f'(正=趋势, 负=反转)')
+    if stats.get('m_drawdown_n'):
+        print(f'    最大回撤={stats["m_drawdown_sum"]/stats["m_drawdown_n"]:.4f}%, '
+              f'最大涨幅={stats["m_drawup_sum"]/stats["m_drawup_n"]:.4f}%')
+    if stats.get('hurst_n'):
+        h = stats['hurst_sum'] / stats['hurst_n']
+        h_type = '趋势性' if h > 0.55 else ('均值回归' if h < 0.45 else '随机游走')
+        print(f'    Hurst指数={h:.4f} ({h_type})')
+    if stats.get('rp_n'):
+        print(f'    反转点数量={stats["rp_sum"]/stats["rp_n"]:.1f}个 (多=震荡, 少=趋势)')
+    # --- v3.5 G. 多周期 均值 ---
+    print('  多周期聚合:')
+    for tf, name in [('tf5', '5分钟'), ('tf15', '15分钟'), ('tf30', '30分钟')]:
+        ur = stats[f'{tf}_up_ratio_sum'] / stats[f'{tf}_up_ratio_n'] if stats.get(f'{tf}_up_ratio_n') else 0
+        mr = stats[f'{tf}_max_return_sum'] / stats[f'{tf}_max_return_n'] if stats.get(f'{tf}_max_return_n') else 0
+        vc = stats[f'{tf}_volume_cv_sum'] / stats[f'{tf}_volume_cv_n'] if stats.get(f'{tf}_volume_cv_n') else 0
+        print(f'    {name}: 阳线占比={ur:.1%}, 单根最大涨跌={mr:.4f}%, 量CV={vc:.3f}')
+    # --- v3.5 E. K线形态 均值 ---
+    print('  1分钟K线形态:')
+    if stats.get('m_up_n'):
+        print(f'    阳线={stats["m_up_sum"]/stats["m_up_n"]:.1f}根, '
+              f'阴线={stats["m_down_sum"]/stats["m_down_n"]:.1f}根, '
+              f'十字星={stats["m_doji_sum"]/stats["m_doji_n"]:.1f}根')
+    if stats.get('l_upper_shadow_n'):
+        print(f'    长上影={stats["l_upper_shadow_sum"]/stats["l_upper_shadow_n"]:.1f}根, '
+              f'长下影={stats["l_lower_shadow_sum"]/stats["l_lower_shadow_n"]:.1f}根, '
+              f'跳空={stats["m_gap_sum"]/stats["m_gap_n"]:.1f}次')
     print(f'{line}\n')
 
 
@@ -1698,6 +1791,30 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
             if vr is not None:
                 stats[f's{i}vr_sum'] += vr
                 stats[f's{i}vr_n'] += 1
+        # v3.5 A. 价格路径 累加
+        for k in ('return_autocorr_lag1', 'return_autocorr_lag2', 'return_autocorr_lag5',
+                  'max_drawdown', 'max_drawup', 'hurst_exponent', 'reversal_points'):
+            v = entry.get(k)
+            if v is not None:
+                short = k.replace('return_autocorr_', 'ac_').replace('max_', 'm_').replace('hurst_exponent', 'hurst').replace('reversal_points', 'rp')
+                stats[f'{short}_sum'] += v
+                stats[f'{short}_n'] += 1
+        # v3.5 G. 多周期 累加
+        for tf in ('tf5', 'tf15', 'tf30'):
+            for suffix in ('up_ratio', 'max_return', 'volume_cv'):
+                k = f'{tf}_{suffix}'
+                v = entry.get(k)
+                if v is not None:
+                    stats[f'{k}_sum'] += v
+                    stats[f'{k}_n'] += 1
+        # v3.5 E. K线形态 累加
+        for k in ('minute_up_count', 'minute_down_count', 'minute_doji_count',
+                  'long_upper_shadow_count', 'long_lower_shadow_count', 'minute_gap_count'):
+            v = entry.get(k)
+            if v is not None:
+                short = k.replace('minute_', 'm_').replace('long_', 'l_').replace('_count', '')
+                stats[f'{short}_sum'] += v
+                stats[f'{short}_n'] += 1
 
     return entries
 
@@ -2417,6 +2534,280 @@ def compute_six_sessions(bars, volumes):
     return result
 
 
+# ---------------------------------------------------------------------------
+# v3.5 新增：A. 价格路径类——机构高频因子
+# ---------------------------------------------------------------------------
+
+def _returns_from_closes(closes):
+    """计算1分钟收益率序列（从收盘价数字列表）。"""
+    if len(closes) < 2:
+        return []
+    returns = []
+    for i in range(1, len(closes)):
+        if closes[i - 1] > 0:
+            returns.append((closes[i] / closes[i - 1] - 1))
+        else:
+            returns.append(0.0)
+    return returns
+
+
+def _autocorr(x, lag):
+    """计算序列x的lag阶自相关系数。"""
+    n = len(x)
+    if n <= lag + 1:
+        return None
+    mean = sum(x) / n
+    numerator = sum((x[i] - mean) * (x[i - lag] - mean) for i in range(lag, n))
+    denominator = sum((x[i] - mean) ** 2 for i in range(n))
+    if denominator == 0:
+        return 0.0
+    return round(numerator / denominator, 4)
+
+
+def compute_price_path(bars):
+    """v3.5 A类：价格路径指标。
+    返回 (autocorr_lag1, autocorr_lag2, autocorr_lag5,
+           max_drawdown, max_drawup, hurst_exponent, reversal_points)。
+    """
+    if not bars or len(bars) < 20:
+        return (None, None, None, None, None, None, None)
+
+    closes = [b['close'] for b in bars]
+    returns = _returns_from_closes(closes)
+
+    # 自相关系数
+    ac_lag1 = _autocorr(returns, 1) if len(returns) > 5 else None
+    ac_lag2 = _autocorr(returns, 2) if len(returns) > 6 else None
+    ac_lag5 = _autocorr(returns, 5) if len(returns) > 9 else None
+
+    # 最大回撤/最大涨幅
+    peak = closes[0]
+    trough = closes[0]
+    max_dd = 0.0
+    max_du = 0.0
+    for c in closes:
+        if c > peak:
+            peak = c
+        if c < trough:
+            trough = c
+        # 回撤：从峰值到当前的跌幅
+        if peak > 0:
+            dd = (peak - c) / peak * 100
+            if dd > max_dd:
+                max_dd = dd
+        # 涨幅：从谷值到当前的涨幅
+        if trough > 0:
+            du = (c - trough) / trough * 100
+            if du > max_du:
+                max_du = du
+
+    # Hurst指数（R/S分析法，对收益率序列计算）
+    returns_for_hurst = _returns_from_closes(closes)
+    hurst = _compute_hurst(returns_for_hurst) if len(returns_for_hurst) >= 50 else None
+
+    # 反转点数量（局部高点+局部低点）
+    reversal_points = 0
+    for i in range(1, len(closes) - 1):
+        if (closes[i] > closes[i - 1] and closes[i] > closes[i + 1]) or \
+           (closes[i] < closes[i - 1] and closes[i] < closes[i + 1]):
+            reversal_points += 1
+
+    return (
+        ac_lag1, ac_lag2, ac_lag5,
+        round(max_dd, 4), round(max_du, 4),
+        hurst, reversal_points,
+    )
+
+
+def _compute_hurst(series):
+    """计算Hurst指数（R/S分析法简化版）。
+    将序列分为多个子区间，计算每个子区间的R/S，然后对数回归。
+    """
+    n = len(series)
+    if n < 50:
+        return None
+
+    # 使用多个窗口大小
+    window_sizes = [10, 20, 30, 50]
+    log_n = []
+    log_rs = []
+
+    for w in window_sizes:
+        if w >= n:
+            continue
+        rs_values = []
+        for start in range(0, n - w, w):
+            sub = series[start:start + w]
+            if len(sub) < 2:
+                continue
+            mean_sub = sum(sub) / len(sub)
+            # 离差序列
+            deviations = [x - mean_sub for x in sub]
+            # 累计离差
+            cum_dev = []
+            s = 0.0
+            for d in deviations:
+                s += d
+                cum_dev.append(s)
+            # 极差R
+            r = max(cum_dev) - min(cum_dev)
+            # 标准差S
+            variance = sum((x - mean_sub) ** 2 for x in sub) / len(sub)
+            std = math.sqrt(variance)
+            if std > 0 and r > 0:
+                rs_values.append(r / std)
+        if rs_values:
+            avg_rs = sum(rs_values) / len(rs_values)
+            if avg_rs > 0:
+                log_n.append(math.log(w))
+                log_rs.append(math.log(avg_rs))
+
+    if len(log_n) < 2:
+        return None
+
+    # 线性回归：log(R/S) = H * log(n) + c
+    # 斜率即为Hurst指数
+    mean_log_n = sum(log_n) / len(log_n)
+    mean_log_rs = sum(log_rs) / len(log_rs)
+    numerator = sum((log_n[i] - mean_log_n) * (log_rs[i] - mean_log_rs) for i in range(len(log_n)))
+    denominator = sum((log_n[i] - mean_log_n) ** 2 for i in range(len(log_n)))
+    if denominator == 0:
+        return None
+    hurst = numerator / denominator
+    # 限制在合理范围
+    hurst = max(0.0, min(1.0, hurst))
+    return round(hurst, 4)
+
+
+# ---------------------------------------------------------------------------
+# v3.5 新增：G. 多周期聚合——5分/15分/30分钟K线
+# ---------------------------------------------------------------------------
+
+def _aggregate_tf(bars, volumes, minutes_per_bar):
+    """将1分钟K线聚合为指定周期的K线。
+    返回聚合后的K线列表（每根含open/high/low/close/volume）。
+    """
+    if not bars or minutes_per_bar <= 0:
+        return []
+    aggregated = []
+    for i in range(0, len(bars), minutes_per_bar):
+        chunk = bars[i:i + minutes_per_bar]
+        chunk_vol = volumes[i:i + minutes_per_bar]
+        if not chunk:
+            continue
+        o = chunk[0].get('open', chunk[0]['close'])
+        h = max(b.get('high', b['close']) for b in chunk)
+        l = min(b.get('low', b['close']) for b in chunk)
+        c = chunk[-1]['close']
+        v = sum(chunk_vol)
+        aggregated.append({'open': o, 'high': h, 'low': l, 'close': c, 'volume': v})
+    return aggregated
+
+
+def compute_multi_timeframe(bars, volumes):
+    """v3.5 G类：多周期聚合指标。
+    聚合为5分/15分/30分钟K线，每个周期输出（阳线占比, 单根最大涨跌幅, 量变异系数）。
+    返回字典含9个字段。
+    """
+    if not bars or not volumes or len(bars) < 30:
+        return None
+
+    result = {}
+    for tf_minutes, prefix in [(5, 'tf5'), (15, 'tf15'), (30, 'tf30')]:
+        agg = _aggregate_tf(bars, volumes, tf_minutes)
+        if len(agg) < 3:
+            result[f'{prefix}_up_ratio'] = None
+            result[f'{prefix}_max_return'] = None
+            result[f'{prefix}_volume_cv'] = None
+            continue
+
+        # 阳线占比
+        up_count = sum(1 for b in agg if b['close'] > b['open'])
+        result[f'{prefix}_up_ratio'] = round(up_count / len(agg), 4)
+
+        # 单根最大涨跌幅绝对值
+        max_return = 0.0
+        for b in agg:
+            if b['open'] > 0:
+                ret = abs((b['close'] / b['open'] - 1) * 100)
+                if ret > max_return:
+                    max_return = ret
+        result[f'{prefix}_max_return'] = round(max_return, 4)
+
+        # 量的变异系数
+        tf_volumes = [b['volume'] for b in agg if b['volume'] > 0]
+        if len(tf_volumes) >= 2:
+            mean_v = sum(tf_volumes) / len(tf_volumes)
+            if mean_v > 0:
+                variance = sum((v - mean_v) ** 2 for v in tf_volumes) / len(tf_volumes)
+                std_v = math.sqrt(variance)
+                result[f'{prefix}_volume_cv'] = round(std_v / mean_v, 4)
+            else:
+                result[f'{prefix}_volume_cv'] = None
+        else:
+            result[f'{prefix}_volume_cv'] = None
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# v3.5 新增：E. K线形态统计——1分钟K线形态分布
+# ---------------------------------------------------------------------------
+
+DOJI_THRESHOLD = 0.0005  # 十字星阈值：实体/开盘价 < 0.05%
+GAP_THRESHOLD = 0.003    # 跳空阈值：分钟间开盘价跳空 > 0.3%
+
+
+def compute_candle_patterns(bars):
+    """v3.5 E类：1分钟K线形态统计。
+    返回 (up_count, down_count, doji_count,
+           long_upper_shadow_count, long_lower_shadow_count, gap_count)。
+    """
+    if not bars or len(bars) < 2:
+        return (None, None, None, None, None, None)
+
+    up_count = 0
+    down_count = 0
+    doji_count = 0
+    long_upper = 0
+    long_lower = 0
+    gap_count = 0
+
+    for i, b in enumerate(bars):
+        o = b.get('open', b['close'])
+        c = b['close']
+        h = b.get('high', max(o, c))
+        l = b.get('low', min(o, c))
+        body = abs(c - o)
+
+        # 阳线/阴线
+        if c > o:
+            up_count += 1
+        elif c < o:
+            down_count += 1
+
+        # 十字星
+        if o > 0 and body / o < DOJI_THRESHOLD:
+            doji_count += 1
+
+        # 长上影/长下影（影线 > 实体2倍，且实体>0）
+        if body > 0:
+            upper_shadow = h - max(o, c)
+            lower_shadow = min(o, c) - l
+            if upper_shadow > body * 2:
+                long_upper += 1
+            if lower_shadow > body * 2:
+                long_lower += 1
+
+        # 跳空（与前一分钟的收盘价比较）
+        if i > 0:
+            prev_c = bars[i - 1]['close']
+            if prev_c > 0 and abs((o - prev_c) / prev_c) > GAP_THRESHOLD:
+                gap_count += 1
+
+    return (up_count, down_count, doji_count, long_upper, long_lower, gap_count)
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -2502,7 +2893,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.4（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.5（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -2552,6 +2943,18 @@ def main():
         's4r_sum', 's4r_n', 's4vr_sum', 's4vr_n',
         's5r_sum', 's5r_n', 's5vr_sum', 's5vr_n',
         's6r_sum', 's6r_n', 's6vr_sum', 's6vr_n',
+        # v3.5 A. 价格路径
+        'ac_lag1_sum', 'ac_lag1_n', 'ac_lag2_sum', 'ac_lag2_n', 'ac_lag5_sum', 'ac_lag5_n',
+        'm_drawdown_sum', 'm_drawdown_n', 'm_drawup_sum', 'm_drawup_n',
+        'hurst_sum', 'hurst_n', 'rp_sum', 'rp_n',
+        # v3.5 G. 多周期
+        'tf5_up_ratio_sum', 'tf5_up_ratio_n', 'tf5_max_return_sum', 'tf5_max_return_n', 'tf5_volume_cv_sum', 'tf5_volume_cv_n',
+        'tf15_up_ratio_sum', 'tf15_up_ratio_n', 'tf15_max_return_sum', 'tf15_max_return_n', 'tf15_volume_cv_sum', 'tf15_volume_cv_n',
+        'tf30_up_ratio_sum', 'tf30_up_ratio_n', 'tf30_max_return_sum', 'tf30_max_return_n', 'tf30_volume_cv_sum', 'tf30_volume_cv_n',
+        # v3.5 E. K线形态
+        'm_up_sum', 'm_up_n', 'm_down_sum', 'm_down_n', 'm_doji_sum', 'm_doji_n',
+        'l_upper_shadow_sum', 'l_upper_shadow_n', 'l_lower_shadow_sum', 'l_lower_shadow_n',
+        'm_gap_sum', 'm_gap_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计

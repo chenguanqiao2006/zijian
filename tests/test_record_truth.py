@@ -47,6 +47,7 @@ from src.analysis.record_truth import (
     compute_vwap_slope, compute_vwap_std_band,
     compute_open_close_5min,
     compute_six_sessions,
+    compute_price_path, compute_multi_timeframe, compute_candle_patterns,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1709,6 +1710,176 @@ class TestV34SixSessions:
         for i in range(1, 7):
             assert f'session_{i}_return' in entry
             assert f'session_{i}_volume_ratio' in entry
+
+
+# ---------------------------------------------------------------------------
+# v3.5 新信号：三大高价值方向（价格路径+多周期+K线形态）
+# ---------------------------------------------------------------------------
+
+class TestV35PricePath:
+    """A. 价格路径类"""
+
+    def test_autocorr_trend(self):
+        # 趋势行情：自相关lag1为正（价格持续上涨）
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.1  # 持续上涨
+            b['high'] = b['close'] + 0.05
+            b['low'] = b['close'] - 0.05
+        result = compute_price_path(bars)
+        assert result[0] is not None  # lag1自相关
+        assert result[0] > 0  # 正自相关（趋势）
+
+    def test_max_drawdown(self):
+        # 最大回撤：先涨后跌
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i in range(50):
+            bars[i]['close'] = 100 + i * 0.2  # 前半段上涨
+            bars[i]['high'] = bars[i]['close'] + 0.05
+            bars[i]['low'] = bars[i]['close'] - 0.05
+        for i in range(50, 100):
+            bars[i]['close'] = 110 - (i - 50) * 0.3  # 后半段下跌
+            bars[i]['high'] = bars[i]['close'] + 0.05
+            bars[i]['low'] = bars[i]['close'] - 0.05
+        result = compute_price_path(bars)
+        assert result[3] is not None  # max_drawdown
+        assert result[3] > 1.0  # 回撤>1%
+
+    def test_hurst_range(self):
+        # Hurst指数在0-1之间
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        result = compute_price_path(bars)
+        if result[5] is not None:
+            assert 0.0 <= result[5] <= 1.0
+
+    def test_reversal_points(self):
+        # 反转点数量：震荡行情反转点多
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 4 - 1.5) * 0.5  # 频繁震荡
+            b['high'] = b['close'] + 0.1
+            b['low'] = b['close'] - 0.1
+        result = compute_price_path(bars)
+        assert result[6] is not None
+        assert result[6] > 10  # 震荡行情反转点多
+
+
+class TestV35MultiTimeframe:
+    """G. 多周期聚合"""
+
+    def test_tf5_basic(self):
+        # 5分钟K线聚合基本功能
+        bars = make_bars(n=120, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 120
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+            b['volume'] = volumes[i]
+        result = compute_multi_timeframe(bars, volumes)
+        assert result is not None
+        assert result['tf5_up_ratio'] is not None
+        assert 0.0 <= result['tf5_up_ratio'] <= 1.0
+
+    def test_tf30_up_ratio_high(self):
+        # 30分钟阳线占比高：全天持续上涨
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.01  # 持续上涨
+            b['open'] = b['close'] - 0.005
+            b['high'] = b['close'] + 0.01
+            b['low'] = b['close'] - 0.01
+            b['volume'] = volumes[i]
+        result = compute_multi_timeframe(bars, volumes)
+        assert result is not None
+        assert result['tf30_up_ratio'] > 0.5  # 阳线占比>50%
+
+    def test_all_tf_present(self):
+        # 三个周期都有值
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 240
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+            b['volume'] = volumes[i]
+        result = compute_multi_timeframe(bars, volumes)
+        assert result is not None
+        for tf in ('tf5', 'tf15', 'tf30'):
+            assert result[f'{tf}_up_ratio'] is not None
+            assert result[f'{tf}_max_return'] is not None
+            assert result[f'{tf}_volume_cv'] is not None
+
+
+class TestV35CandlePatterns:
+    """E. K线形态统计"""
+
+    def test_up_down_count(self):
+        # 阳线/阴线计数
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i % 2 == 0:
+                b['open'] = 100.0
+                b['close'] = 100.5  # 阳线
+            else:
+                b['open'] = 100.5
+                b['close'] = 100.0  # 阴线
+            b['high'] = max(b['open'], b['close']) + 0.1
+            b['low'] = min(b['open'], b['close']) - 0.1
+        result = compute_candle_patterns(bars)
+        assert result[0] == 50  # 阳线50根
+        assert result[1] == 50  # 阴线50根
+
+    def test_doji_count(self):
+        # 十字星计数
+        bars = make_bars(n=50, price=100.0, vol=1000.0)
+        for b in bars:
+            b['open'] = 100.0
+            b['close'] = 100.001  # 极小实体=十字星
+            b['high'] = 100.1
+            b['low'] = 99.9
+        result = compute_candle_patterns(bars)
+        assert result[2] == 50  # 全部十字星
+
+    def test_long_shadow(self):
+        # 长上影/长下影
+        bars = make_bars(n=20, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['open'] = 100.0
+            b['close'] = 100.1  # 实体0.1
+            b['high'] = 100.5  # 上影0.4 > 实体2倍
+            b['low'] = 99.9
+        result = compute_candle_patterns(bars)
+        assert result[3] == 20  # 全部长上影
+
+    def test_analyze_day_v35_fields(self):
+        # analyze_day 返回值包含 v3.5 字段（22个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        v35_fields = (
+            # A. 价格路径
+            'return_autocorr_lag1', 'return_autocorr_lag2', 'return_autocorr_lag5',
+            'max_drawdown', 'max_drawup', 'hurst_exponent', 'reversal_points',
+            # G. 多周期
+            'tf5_up_ratio', 'tf5_max_return', 'tf5_volume_cv',
+            'tf15_up_ratio', 'tf15_max_return', 'tf15_volume_cv',
+            'tf30_up_ratio', 'tf30_max_return', 'tf30_volume_cv',
+            # E. K线形态
+            'minute_up_count', 'minute_down_count', 'minute_doji_count',
+            'long_upper_shadow_count', 'long_lower_shadow_count', 'minute_gap_count',
+        )
+        for field in v35_fields:
+            assert field in entry, f'缺少字段: {field}'
 
 
 if __name__ == '__main__':
