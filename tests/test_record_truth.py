@@ -38,6 +38,8 @@ from src.analysis.record_truth import (
     load_market_volume,
     compute_morning_afternoon_vol_ratio, compute_volume_peak_concentration,
     compute_price_volume_divergence, compute_wave_features,
+    compute_close_in_amplitude, compute_vwap_deviation,
+    compute_realized_volatility, compute_up_down_minute_ratio, compute_gap_filled,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1034,6 +1036,114 @@ class TestV28ExtractEveryDrop:
         assert entry is not None
         for field in ('morning_afternoon_vol_ratio', 'volume_peak_concentration',
                       'price_volume_divergence', 'wave_morning', 'wave_close', 'wave_pulses'):
+            assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v2.9 新信号：继续深挖——5个新字段
+# ---------------------------------------------------------------------------
+
+class TestV29Deeper:
+    def test_close_in_amplitude_at_high(self):
+        # 收在全天最高 → 接近1
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i  # 持续上涨
+            b['high'] = b['close']  # 最高=收盘（最后一根收在全天最高）
+            b['low'] = 100
+        cia = compute_close_in_amplitude(bars)
+        assert cia is not None
+        assert cia > 0.9
+
+    def test_close_in_amplitude_at_low(self):
+        # 收在全天最低 → 接近0
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 110 - i  # 持续下跌
+            b['high'] = 110
+            b['low'] = b['close']  # 最低=收盘（最后一根收在全天最低）
+        cia = compute_close_in_amplitude(bars)
+        assert cia is not None
+        assert cia < 0.1
+
+    def test_vwap_deviation_positive(self):
+        # 收盘在VWAP上方 → 正值
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 10
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.5  # 持续上涨
+        dev = compute_vwap_deviation(bars, volumes)
+        assert dev is not None
+        assert dev > 0
+
+    def test_vwap_deviation_negative(self):
+        # 收盘在VWAP下方 → 负值
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 10
+        for i, b in enumerate(bars):
+            b['close'] = 105 - i * 0.5  # 持续下跌
+        dev = compute_vwap_deviation(bars, volumes)
+        assert dev is not None
+        assert dev < 0
+
+    def test_realized_volatility_basic(self):
+        # 已实现波动率基本功能
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 3 - 1) * 0.1
+        rv = compute_realized_volatility(bars)
+        assert rv is not None
+        assert rv > 0
+
+    def test_realized_volatility_low(self):
+        # 价格几乎不动 → 波动率低
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        for b in bars:
+            b['close'] = 100.0
+        rv = compute_realized_volatility(bars)
+        assert rv is not None
+        assert rv == 0.0
+
+    def test_up_down_minute_ratio_more_up(self):
+        # 阳线分钟多 → 比值>1
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i % 3 != 0:  # 7根阳线，3根阴线
+                b['close'] = b['open'] + 0.1
+            else:
+                b['close'] = b['open'] - 0.1
+        ratio = compute_up_down_minute_ratio(bars)
+        assert ratio is not None
+        assert ratio > 1.0
+
+    def test_gap_filled_up_gap(self):
+        # 向上跳空，日内最低价≤前收 → 回补
+        bars = make_bars(n=10, price=102.0, vol=1000.0)  # 开盘102，前收100
+        bars[0]['open'] = 102.0
+        for b in bars:
+            b['high'] = max(b['open'], b['close']) + 0.5
+            b['low'] = 99.0  # 日内最低99 ≤ 前收100，回补
+        filled = compute_gap_filled(bars, 100.0)
+        assert filled is True
+
+    def test_gap_filled_no_gap(self):
+        # 开盘=前收 → 无缺口，返回None
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        bars[0]['open'] = 100.0
+        filled = compute_gap_filled(bars, 100.0)
+        assert filled is None
+
+    def test_analyze_day_v29_fields(self):
+        # analyze_day 返回值包含 v2.9 字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        for field in ('close_in_amplitude', 'vwap_deviation', 'realized_volatility',
+                      'up_down_minute_ratio', 'gap_filled'):
             assert field in entry, f'缺少字段: {field}'
 
 

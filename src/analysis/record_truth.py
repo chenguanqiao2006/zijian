@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.8（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v2.9（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -98,6 +98,19 @@ v2.8 相对 v2.7 的变更（榨干1分钟数据——6个新字段）：
     [新增] wave_close     尾盘30分钟量占比（移植 yaox v3.0，与 tail_ratio 相同口径）。
     [新增] wave_pulses    脉冲数 —— 量>均量×2 的分钟数（移植 yaox v3.0）。
     设计原则：全部只记录不入投票，榨干1分钟数据的每一滴信息。
+
+v2.9 相对 v2.8 的变更（继续深挖——5个新字段）：
+    [新增] close_in_amplitude   收盘在全天振幅中的位置 = (收盘-最低)/(最高-最低)。
+           0=收在全天最低价，1=收在全天最高价，0.5=收在振幅中点。
+    [新增] vwap_deviation       VWAP偏离度 = (收盘/全天VWAP-1)×100（%）。
+           正值=收盘在均价上方（主力护盘强），负值=收盘在均价下方。
+    [新增] realized_volatility  已实现波动率 = 1分钟收益率标准差 × √240（年化近似）。
+           衡量日内波动强度，与 amplitude（振幅）互补。
+    [新增] up_down_minute_ratio 涨跌分钟比 = 阳线分钟数 / 阴线分钟数。
+           >1=多头主导，<1=空头主导。
+    [新增] gap_filled           开盘缺口是否回补。
+           True=日内价格触及开盘价（缺口回补），False=未回补，None=无缺口。
+    设计原则：全部只记录不入投票，继续榨干1分钟数据。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -921,6 +934,13 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     pv_divergence = compute_price_volume_divergence(bars, volumes)
     wave_features = compute_wave_features(bars, volumes, vol_mean)
 
+    # --- v2.9 新增：继续深挖 ---
+    close_in_amp = compute_close_in_amplitude(bars)
+    vwap_dev = compute_vwap_deviation(bars, volumes)
+    real_vol = compute_realized_volatility(bars)
+    up_down_ratio = compute_up_down_minute_ratio(bars)
+    gap_filled = compute_gap_filled(bars, prev_close)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1001,6 +1021,12 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'wave_morning': wave_features['wave_morning'] if wave_features else None,
         'wave_close': wave_features['wave_close'] if wave_features else None,
         'wave_pulses': wave_features['wave_pulses'] if wave_features else None,
+        # --- v2.9 新增：继续深挖 ---
+        'close_in_amplitude': close_in_amp,
+        'vwap_deviation': vwap_dev,
+        'realized_volatility': real_vol,
+        'up_down_minute_ratio': up_down_ratio,
+        'gap_filled': gap_filled,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1167,6 +1193,22 @@ def print_summary(stats: dict):
         print('  量价背离:')
         for pvd, cnt in sorted(pvd_counts.items(), key=lambda x: -x[1]):
             print(f'    {pvd:20s}: {cnt:5d}  ({cnt / n:6.1%})')
+    # --- v2.9 新信号均值：继续深挖 ---
+    if stats.get('cia_n'):
+        print(f'  指标均值: close_in_amplitude={stats["cia_sum"] / stats["cia_n"]:.3f} '
+              f'(0=收最低, 1=收最高)')
+    if stats.get('vd_n'):
+        print(f'  指标均值: vwap_deviation={stats["vd_sum"] / stats["vd_n"]:+.3f}% '
+              f'(收盘相对VWAP偏离)')
+    if stats.get('rv_n'):
+        print(f'  指标均值: realized_volatility={stats["rv_sum"] / stats["rv_n"]:.4f} '
+              f'(年化已实现波动率)')
+    if stats.get('udr_n'):
+        print(f'  指标均值: up_down_minute_ratio={stats["udr_sum"] / stats["udr_n"]:.3f} '
+              f'(>1多头主导, <1空头主导)')
+    if stats.get('gf_n'):
+        gf_rate = stats['gf_sum'] / stats['gf_n']
+        print(f'  缺口回补率: {gf_rate:.1%} ({stats["gf_sum"]}/{stats["gf_n"]})')
     print(f'{line}\n')
 
 
@@ -1324,6 +1366,18 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         pvd = entry.get('price_volume_divergence')
         if pvd:
             stats['pvd_counts'][pvd] = stats['pvd_counts'].get(pvd, 0) + 1
+        # v2.9 新信号累加
+        for k, v in (('cia', entry.get('close_in_amplitude')),
+                     ('vd', entry.get('vwap_deviation')),
+                     ('rv', entry.get('realized_volatility')),
+                     ('udr', entry.get('up_down_minute_ratio'))):
+            if v is not None and v != float('inf'):
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
+        gf = entry.get('gap_filled')
+        if gf is not None:
+            stats['gf_sum'] += 1 if gf else 0
+            stats['gf_n'] += 1
 
     return entries
 
@@ -1425,6 +1479,113 @@ def compute_wave_features(bars, volumes, vol_mean):
     }
 
 
+# ---------------------------------------------------------------------------
+# v2.9 新增：继续深挖——收盘位置+VWAP偏离+已实现波动率+涨跌分钟比+缺口回补
+# ---------------------------------------------------------------------------
+
+def compute_close_in_amplitude(bars):
+    """v2.9 收盘在全天振幅中的位置 = (收盘-最低)/(最高-最低)。
+    0=收在全天最低价，1=收在全天最高价，0.5=收在振幅中点。
+    """
+    if not bars or len(bars) < 2:
+        return None
+    closes = [b['close'] for b in bars]
+    highs = [b['high'] for b in bars]
+    lows = [b['low'] for b in bars]
+    day_high = max(highs)
+    day_low = min(lows)
+    if day_high == day_low:
+        return 0.5  # 振幅为零时取中点
+    close_price = closes[-1]
+    return round((close_price - day_low) / (day_high - day_low), 3)
+
+
+def compute_vwap_deviation(bars, volumes):
+    """v2.9 VWAP偏离度 = (收盘/全天VWAP - 1) × 100（%）。
+    全天VWAP = 累计(收盘价×成交量) / 累计成交量（用全天数据计算）。
+    正值=收盘在均价上方（主力护盘强），负值=收盘在均价下方。
+    """
+    if not bars or not volumes or sum(volumes) <= 0:
+        return None
+    closes = [b['close'] for b in bars]
+    total_pv = sum(c * v for c, v in zip(closes, volumes))
+    total_v = sum(volumes)
+    if total_v <= 0:
+        return None
+    vwap = total_pv / total_v
+    if vwap <= 0:
+        return None
+    return round((closes[-1] / vwap - 1) * 100, 3)
+
+
+def compute_realized_volatility(bars):
+    """v2.9 已实现波动率 = 1分钟收益率标准差 × √240（年化近似）。
+    1分钟收益率 = close[i]/close[i-1] - 1。
+    衡量日内波动强度，与 amplitude（振幅）互补——amplitude 看极值，
+    realized_volatility 看整体波动路径。
+    """
+    if not bars or len(bars) < 10:
+        return None
+    closes = [b['close'] for b in bars]
+    returns = []
+    for i in range(1, len(closes)):
+        if closes[i - 1] > 0:
+            returns.append(closes[i] / closes[i - 1] - 1)
+    if len(returns) < 5:
+        return None
+    mean_r = sum(returns) / len(returns)
+    variance = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+    std_r = math.sqrt(variance)
+    # 年化近似：× √240（一天约240根1分钟K线）
+    return round(std_r * math.sqrt(240), 6)
+
+
+def compute_up_down_minute_ratio(bars):
+    """v2.9 涨跌分钟比 = 阳线分钟数 / 阴线分钟数。
+    阳线 = close > open，阴线 = close < open，平盘 = close == open（不计入）。
+    >1=多头主导，<1=空头主导。
+    """
+    if not bars or len(bars) < 2:
+        return None
+    up_count = 0
+    down_count = 0
+    for b in bars:
+        o = b.get('open', 0)
+        c = b.get('close', 0)
+        if c > o:
+            up_count += 1
+        elif c < o:
+            down_count += 1
+    if down_count == 0:
+        return float('inf') if up_count > 0 else None
+    return round(up_count / down_count, 3)
+
+
+def compute_gap_filled(bars, prev_close):
+    """v2.9 开盘缺口是否回补。
+    若开盘价 > 前收盘价（向上跳空），检查日内最低价是否 ≤ 前收盘价（回补）。
+    若开盘价 < 前收盘价（向下跳空），检查日内最高价是否 ≥ 前收盘价（回补）。
+    若开盘价 == 前收盘价（无缺口），返回 None。
+    返回：True=缺口已回补，False=未回补，None=无缺口。
+    """
+    if not bars or prev_close is None or prev_close <= 0:
+        return None
+    open_price = bars[0].get('open', 0)
+    if open_price <= 0:
+        return None
+    day_high = max(b.get('high', 0) for b in bars)
+    day_low = min(b.get('low', 0) for b in bars)
+
+    if open_price > prev_close:
+        # 向上跳空：回补 = 日内最低价 ≤ 前收盘价
+        return day_low <= prev_close
+    elif open_price < prev_close:
+        # 向下跳空：回补 = 日内最高价 ≥ 前收盘价
+        return day_high >= prev_close
+    else:
+        return None  # 无缺口
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -1510,7 +1671,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v2.8（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v2.9（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -1535,6 +1696,9 @@ def main():
         # v2.8 新增：榨干1分钟数据
         'mavr_sum', 'mavr_n', 'vpc_sum', 'vpc_n',
         'wm_sum', 'wm_n', 'wc_sum', 'wc_n', 'wp_sum', 'wp_n',
+        # v2.9 新增：继续深挖
+        'cia_sum', 'cia_n', 'vd_sum', 'vd_n', 'rv_sum', 'rv_n',
+        'udr_sum', 'udr_n', 'gf_sum', 'gf_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
