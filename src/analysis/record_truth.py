@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.4（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v2.5（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -40,6 +40,25 @@ v2.4 相对 v2.3 的变更（六大新增信号，只记录、暂不入投票）
            +1=全天买入主导，-1=全天卖出主导，0=买卖均衡。
     设计原则：与 v2.3 一致 —— 六个新字段只存不投，不影响 verdict / quant_pct；
     待积累足够数据后做阈值体检，再决定是否纳入投票或独立输出。
+
+v2.5 相对 v2.4 的变更（分时形态识别，只记录、暂不入投票）：
+    [新增] amplitude           全天振幅（%）= (最高-最低)/前收 × 100。
+    [新增] morning_return      上午涨跌幅 = (11:30收盘/开盘)-1。
+    [新增] afternoon_return    下午涨跌幅 = (收盘/13:00开盘)-1。
+    [新增] open_gap_pct        开盘缺口（%）= (开盘/前收-1) × 100。
+    [新增] high_time_idx       全天最高价出现的分钟索引（0-239，0=09:30）。
+    [新增] low_time_idx        全天最低价出现的分钟索引（0-239）。
+    [新增] pattern             分时形态标签（9种互斥，按优先级判定）：
+           sideways            横盘（振幅<1%）
+           tail_rally          尾盘拉升（尾盘涨>1%且为全天最强时段）
+           tail_dive           尾盘跳水（尾盘跌>1%）
+           v_shape             V型反转（上午最低+下午最高+振幅>2%）
+           inverted_v_shape    倒V型（上午最高+下午最低+振幅>2%）
+           morning_pullback    早盘冲高回落（最高在前30分钟+回落>1%）
+           one_side_up         单边上涨（收盘接近最高+上午弱下午强）
+           one_side_down       单边下跌（收盘接近最低+上午强下午弱）
+           no_clear_pattern    无明显形态
+    设计原则：与 v2.3/v2.4 一致 —— 只存不投，先积累数据再做阈值体检。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -93,6 +112,14 @@ HEAVY_VOL_MULT = 2.0     # 放量判定：分钟量 ≥ 2 × 当日分钟均量
 
 # --- v2.4 新信号参数 ---
 BIG_ORDER_VOL_MULT = 3.0  # 大单分钟判定：分钟量 > 当日均量 × 3（过滤散户噪声）
+
+# --- v2.5 新信号参数：分时形态识别 ---
+SIDEWAYS_AMP = 1.0        # 横盘振幅阈值（%），低于此值判为横盘
+TAIL_RALLY_PCT = 1.0      # 尾盘拉升阈值（%），尾盘涨幅超过此值
+V_SHAPE_AMP = 2.0         # V型/倒V型振幅阈值（%）
+MORNING_PULLBACK_PCT = 1.0  # 早盘冲高回落阈值（%），从最高回落超过此值
+CLOSE_NEAR_HIGH = 0.99    # 单边上涨：收盘价 >= 最高价 × 此值
+CLOSE_NEAR_LOW = 1.01     # 单边下跌：收盘价 <= 最低价 × 此值
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +498,148 @@ def compute_big_order_stats(bars, volumes, mean_vol):
 
 
 # ---------------------------------------------------------------------------
+# v2.5 新增指标：分时形态识别
+# ---------------------------------------------------------------------------
+
+def _find_morning_end_idx(bars):
+    """找到上午最后一根K线索引（11:30附近，时间<=11:30的最后一根）。"""
+    for i in range(len(bars) - 1, -1, -1):
+        t = str(bars[i]['time'])
+        m = re.search(r'(\d{1,2}):(\d{2})', t)
+        if m:
+            hh, mm = int(m.group(1)), int(m.group(2))
+            if hh < 12 or (hh == 11 and mm <= 30):
+                return i
+    return len(bars) // 2  # 兜底：取中间
+
+
+def _find_afternoon_start_idx(bars):
+    """找到下午第一根K线索引（13:00附近，时间>=13:00的第一根）。"""
+    for i, b in enumerate(bars):
+        t = str(b['time'])
+        m = re.search(r'(\d{1,2}):(\d{2})', t)
+        if m:
+            hh, mm = int(m.group(1)), int(m.group(2))
+            if hh >= 13:
+                return i
+    return len(bars) // 2  # 兜底：取中间
+
+
+def compute_pattern_stats(bars, prev_close):
+    """v2.5 分时形态识别（基于1分钟时间序列）。
+
+    返回字典：
+        amplitude           全天振幅（%）= (最高-最低)/前收 × 100
+        morning_return      上午涨跌幅 = (上午末根收盘/开盘)-1
+        afternoon_return    下午涨跌幅 = (收盘/下午首根开盘)-1
+        open_gap_pct        开盘缺口（%）= (开盘/前收-1) × 100
+        high_time_idx       全天最高价出现的分钟索引（0-based）
+        low_time_idx        全天最低价出现的分钟索引（0-based）
+        pattern             形态标签（9种互斥）
+    """
+    if not bars or len(bars) < 2:
+        return None
+
+    n = len(bars)
+    opens = [b['open'] for b in bars]
+    closes = [b['close'] for b in bars]
+    highs = [b['high'] for b in bars]
+    lows = [b['low'] for b in bars]
+
+    day_high = max(highs)
+    day_low = min(lows)
+    high_idx = highs.index(day_high)
+    low_idx = lows.index(day_low)
+
+    # 振幅（基于前收盘价，若无前收则基于开盘价）
+    base = prev_close if (prev_close and prev_close > 0) else opens[0]
+    amplitude = round((day_high - day_low) / base * 100, 4) if base > 0 else None
+
+    # 开盘缺口
+    open_gap_pct = round((opens[0] / base - 1) * 100, 4) if base > 0 else None
+
+    # 上午/下午涨跌幅
+    morning_end = _find_morning_end_idx(bars)
+    afternoon_start = _find_afternoon_start_idx(bars)
+
+    morning_return = None
+    if opens[0] > 0 and morning_end < n:
+        morning_return = round(closes[morning_end] / opens[0] - 1, 6)
+
+    afternoon_return = None
+    if afternoon_start < n and opens[afternoon_start] > 0:
+        afternoon_return = round(closes[-1] / opens[afternoon_start] - 1, 6)
+
+    # --- 形态判定（按优先级，互斥） ---
+    pattern = 'no_clear_pattern'
+
+    # 1. 横盘
+    if amplitude is not None and amplitude < SIDEWAYS_AMP:
+        pattern = 'sideways'
+
+    # 2. 尾盘拉升（需要 tail_gain，由调用方传入或在此计算）
+    # 尾盘30分钟涨幅
+    elif len(bars) >= 31:
+        tail_base = bars[-31]['close']
+        tail_gain = (closes[-1] / tail_base - 1) if tail_base > 0 else 0
+        if tail_gain > TAIL_RALLY_PCT / 100:
+            # 检查尾盘是否为全天最强时段
+            session_returns = []
+            for _, a, b in SESSION_SPLITS:
+                a, b = min(a, n), min(b, n)
+                if b > a and opens[a] > 0:
+                    session_returns.append(closes[min(b - 1, n - 1)] / opens[a] - 1)
+                else:
+                    session_returns.append(-999)
+            if session_returns and tail_gain >= max(session_returns):
+                pattern = 'tail_rally'
+
+        # 3. 尾盘跳水
+        if pattern == 'no_clear_pattern' and tail_gain < -TAIL_RALLY_PCT / 100:
+            pattern = 'tail_dive'
+
+    # 4. V型反转（上午最低 + 下午最高 + 振幅够大）
+    if pattern == 'no_clear_pattern':
+        half = n // 2
+        if (low_idx < half and high_idx >= half and
+                amplitude is not None and amplitude > V_SHAPE_AMP):
+            pattern = 'v_shape'
+        # 5. 倒V型（上午最高 + 下午最低 + 振幅够大）
+        elif (high_idx < half and low_idx >= half and
+              amplitude is not None and amplitude > V_SHAPE_AMP):
+            pattern = 'inverted_v_shape'
+
+    # 6. 早盘冲高回落（最高在前30分钟 + 从最高回落超过阈值）
+    if pattern == 'no_clear_pattern':
+        first_30 = min(30, n)
+        if (high_idx < first_30 and day_high > 0 and
+                (day_high - closes[-1]) / day_high > MORNING_PULLBACK_PCT / 100):
+            pattern = 'morning_pullback'
+
+    # 7. 单边上涨（收盘接近最高 + 上午弱下午强）
+    if pattern == 'no_clear_pattern':
+        if (closes[-1] >= day_high * CLOSE_NEAR_HIGH and
+                morning_return is not None and afternoon_return is not None and
+                morning_return < afternoon_return):
+            pattern = 'one_side_up'
+        # 8. 单边下跌（收盘接近最低 + 上午强下午弱）
+        elif (closes[-1] <= day_low * CLOSE_NEAR_LOW and
+              morning_return is not None and afternoon_return is not None and
+              morning_return > afternoon_return):
+            pattern = 'one_side_down'
+
+    return {
+        'amplitude': amplitude,
+        'morning_return': morning_return,
+        'afternoon_return': afternoon_return,
+        'open_gap_pct': open_gap_pct,
+        'high_time_idx': high_idx,
+        'low_time_idx': low_idx,
+        'pattern': pattern,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 涨跌停 / 一字板检测
 # ---------------------------------------------------------------------------
 
@@ -549,6 +718,9 @@ def analyze_day(bars, code, prev_close):
     # --- v2.4 新增六信号（只记录，不入投票）：大单拆分 + 主力净流入 ---
     big_stats = compute_big_order_stats(bars, volumes, vol_mean)
 
+    # --- v2.5 新增：分时形态识别（只记录，不入投票） ---
+    pattern_stats = compute_pattern_stats(bars, prev_close)
+
     hits = 0
     if cv < THRESH['cv']:
         hits += 1
@@ -584,6 +756,14 @@ def analyze_day(bars, code, prev_close):
         'main_net_inflow_pct': big_stats['main_net_inflow_pct'] if big_stats else None,
         'big_order_net_inflow': big_stats['big_order_net_inflow'] if big_stats else None,
         'order_flow_imbalance': big_stats['order_flow_imbalance'] if big_stats else None,
+        # --- v2.5 新增：分时形态识别 ---
+        'amplitude': pattern_stats['amplitude'] if pattern_stats else None,
+        'morning_return': pattern_stats['morning_return'] if pattern_stats else None,
+        'afternoon_return': pattern_stats['afternoon_return'] if pattern_stats else None,
+        'open_gap_pct': pattern_stats['open_gap_pct'] if pattern_stats else None,
+        'high_time_idx': pattern_stats['high_time_idx'] if pattern_stats else None,
+        'low_time_idx': pattern_stats['low_time_idx'] if pattern_stats else None,
+        'pattern': pattern_stats['pattern'] if pattern_stats else None,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -692,6 +872,21 @@ def print_summary(stats: dict):
         print(f'  指标均值: big_order_net_inflow={stats["boni_sum"] / stats["boni_n"]:+.0f} 手')
     if stats['ofi_n']:
         print(f'  指标均值: order_flow_imbalance={stats["ofi_sum"] / stats["ofi_n"]:+.3f}')
+    # --- v2.5 新信号均值：分时形态识别 ---
+    if stats['amp_n']:
+        print(f'  指标均值: amplitude={stats["amp_sum"] / stats["amp_n"]:.2f}%')
+    if stats['mr_n']:
+        print(f'  指标均值: morning_return={stats["mr_sum"] / stats["mr_n"]:+.3%}')
+    if stats['ar_n']:
+        print(f'  指标均值: afternoon_return={stats["ar_sum"] / stats["ar_n"]:+.3%}')
+    if stats['og_n']:
+        print(f'  指标均值: open_gap_pct={stats["og_sum"] / stats["og_n"]:+.3f}%')
+    # 形态分布
+    pattern_counts = stats.get('pattern_counts', {})
+    if pattern_counts:
+        print('  形态分布:')
+        for pat, cnt in sorted(pattern_counts.items(), key=lambda x: -x[1]):
+            print(f'    {pat:25s}: {cnt:5d}  ({cnt / n:6.1%})')
     print(f'{line}\n')
 
 
@@ -767,6 +962,17 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool) ->
             if v is not None:
                 stats[f'{k}_sum'] += v
                 stats[f'{k}_n'] += 1
+        # v2.5 新信号累加：分时形态识别
+        for k, v in (('amp', entry.get('amplitude')),
+                     ('mr', entry.get('morning_return')),
+                     ('ar', entry.get('afternoon_return')),
+                     ('og', entry.get('open_gap_pct'))):
+            if v is not None:
+                stats[f'{k}_sum'] += v
+                stats[f'{k}_n'] += 1
+        pat = entry.get('pattern')
+        if pat:
+            stats['pattern_counts'][pat] = stats['pattern_counts'].get(pat, 0) + 1
 
     return entries
 
@@ -787,7 +993,11 @@ def main():
         'bom_sum', 'bom_n', 'bor_sum', 'bor_n',
         'mni_sum', 'mni_n', 'mnip_sum', 'mnip_n',
         'boni_sum', 'boni_n', 'ofi_sum', 'ofi_n',
+        # v2.5 新增：分时形态识别
+        'amp_sum', 'amp_n', 'mr_sum', 'mr_n', 'ar_sum', 'ar_n',
+        'og_sum', 'og_n',
     )}
+    stats['pattern_counts'] = {}  # v2.5 形态分布统计
 
     kline_1min_dir = min1_dir()  # 经目录宪法
     if not kline_1min_dir.exists():

@@ -33,7 +33,7 @@ from src.analysis.record_truth import (
     filter_session, load_and_group_days,
     safe_corr, session_volume_profile, flatness_score, build_feature_snapshot,
     compute_flat_vol_ratio, compute_tail_gain,
-    compute_big_order_stats,
+    compute_big_order_stats, compute_pattern_stats,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -366,6 +366,159 @@ class TestV24Signals:
         assert entry is not None
         ofi = entry['order_flow_imbalance']
         assert -1.0 <= ofi <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# v2.5 新信号：分时形态识别
+# ---------------------------------------------------------------------------
+
+class TestV25Signals:
+    def test_pattern_stats_basic(self):
+        # 基本功能：构造简单K线
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert 'amplitude' in stats
+        assert 'pattern' in stats
+        assert 'high_time_idx' in stats
+        assert 'low_time_idx' in stats
+
+    def test_pattern_sideways(self):
+        # 横盘：振幅极小
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for b in bars:
+            b['high'] = 100.05
+            b['low'] = 99.95
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] == 'sideways'
+        assert stats['amplitude'] < 1.0
+
+    def test_pattern_v_shape(self):
+        # V型：上午最低（明确在上午中段），下午最高，振幅大
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i < 60:  # 前60分钟下跌
+                b['close'] = 100 - i * 0.04
+            elif i < 120:  # 60-120分钟低位横盘
+                b['close'] = 97.6
+            else:  # 下午上涨
+                b['close'] = 97.6 + (i - 120) * 0.04
+            b['low'] = b['close'] - 0.05
+            b['high'] = b['close'] + 0.05
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] == 'v_shape'
+        assert stats['low_time_idx'] < 120
+        assert stats['high_time_idx'] >= 120
+
+    def test_pattern_inverted_v_shape(self):
+        # 倒V型：上午最高（明确在上午中段），下午最低，振幅大
+        # 注意：尾盘横盘不跌，避免触发 tail_dive（优先级更高）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i < 60:  # 前60分钟上涨
+                b['close'] = 100 + i * 0.04
+            elif i < 120:  # 60-120分钟高位横盘
+                b['close'] = 102.4
+            elif i < 210:  # 下午前段下跌
+                b['close'] = 102.4 - (i - 120) * 0.04
+            else:  # 尾盘横盘（不跌，避免触发tail_dive）
+                b['close'] = 98.8
+            b['low'] = b['close'] - 0.05
+            b['high'] = b['close'] + 0.05
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] == 'inverted_v_shape'
+        assert stats['high_time_idx'] < 120
+        assert stats['low_time_idx'] >= 120
+
+    def test_pattern_morning_pullback(self):
+        # 早盘冲高回落：开盘即最高，然后回落（振幅<2%避免触发倒V型）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i == 0:
+                b['high'] = 101.5
+                b['close'] = 101.2
+            else:
+                b['close'] = 100.5 - i * 0.002
+            b['low'] = b['close'] - 0.05
+            b['high'] = max(b['high'], b['close'] + 0.05)
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] == 'morning_pullback'
+        assert stats['high_time_idx'] < 30
+
+    def test_pattern_one_side_up(self):
+        # 单边上涨：上午弱，下午强，收盘接近最高
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            if i < 120:  # 上午微跌
+                b['close'] = 100 - i * 0.002
+            else:  # 下午大涨
+                b['close'] = 99.76 + (i - 120) * 0.01
+            b['high'] = b['close'] + 0.05
+            b['low'] = b['close'] - 0.05
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] == 'one_side_up'
+        assert stats['morning_return'] < stats['afternoon_return']
+
+    def test_amplitude_calculation(self):
+        # 振幅计算正确
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        bars[0]['high'] = 105.0
+        bars[5]['low'] = 95.0
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert abs(stats['amplitude'] - 10.0) < 0.1  # (105-95)/100*100 = 10%
+
+    def test_open_gap_pct(self):
+        # 开盘缺口计算
+        bars = make_bars(n=10, price=102.0, vol=1000.0)  # 开盘102
+        stats = compute_pattern_stats(bars, 100.0)  # 前收100
+        assert stats is not None
+        assert abs(stats['open_gap_pct'] - 2.0) < 0.1  # (102/100-1)*100 = 2%
+
+    def test_high_low_time_idx(self):
+        # 最高/最低价位置正确
+        bars = make_bars(n=10, price=100.0, vol=1000.0)
+        bars[3]['high'] = 110.0  # 最高在索引3
+        bars[7]['low'] = 90.0    # 最低在索引7
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['high_time_idx'] == 3
+        assert stats['low_time_idx'] == 7
+
+    def test_analyze_day_v25_fields(self):
+        # analyze_day 返回值包含 v2.5 字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        for field in ('amplitude', 'morning_return', 'afternoon_return',
+                      'open_gap_pct', 'high_time_idx', 'low_time_idx', 'pattern'):
+            assert field in entry, f'缺少字段: {field}'
+        assert entry['pattern'] is not None
+
+    def test_pattern_values_valid(self):
+        # pattern 值必须是9种合法值之一
+        valid_patterns = {
+            'sideways', 'tail_rally', 'tail_dive', 'v_shape',
+            'inverted_v_shape', 'morning_pullback', 'one_side_up',
+            'one_side_down', 'no_clear_pattern',
+        }
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 7 - 3) * 0.1
+            b['high'] = max(b['open'], b['close']) + 0.05
+            b['low'] = min(b['open'], b['close']) - 0.05
+        stats = compute_pattern_stats(bars, 100.0)
+        assert stats is not None
+        assert stats['pattern'] in valid_patterns
 
 
 # ---------------------------------------------------------------------------
