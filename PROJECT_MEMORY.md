@@ -5,7 +5,7 @@
 > 文档简称代号：档案。
 > 使用规则：任何大语言模型参与本项目前，须完整阅读本文档。
 > 维护责任：每次任务完成后，更新第七章（当前阶段）与第十二章（版本记录）。
-> 当前版本：v3.1
+> 当前版本：v3.2
 
 ---
 
@@ -190,7 +190,7 @@ v2.6 补充说明：本条规范在代码实现阶段被严格执行。此前规
 - 档案（本文件）是顶级入口，丢失对话后只读本文件即可重建全部上下文
 - specs/ 目录下所有规格文件是二级备份
 - docs/ 目录下所有 HTML 是三级备份（理论依据）——确定不上传 GitHub，仅保留飞书云盘副本
-- 代码文件（src/、tests/、.github/）为四级备份——飞书云盘有副本，GitHub 待同步
+- 代码文件（src/、tests/、.github/）为四级备份——已同步 GitHub（v3.2）
 - 飞书云盘保留一份档案与 specs/ 完整副本
 
 ---
@@ -214,7 +214,7 @@ HTML 存储策略（v2.5 确定）：六本 HTML 不上传 GitHub，仅保留飞
 
 HTML 内部修正记录（v2.4，飞书云盘）：03 目录编号错位已修正；04/05《量波逮涨停》出版月份（7月→6月）+ ISBN（【未能核实】→9787519609832）已修正。
 
-### 6.2 规格体系工程（13份文件，GitHub 同步中）
+### 6.2 规格体系工程（13份文件，已上传 GitHub）
 
 | 序号 | 文件名 | 定位 | 状态 |
 |:---:|:---|:---|:---|
@@ -230,8 +230,6 @@ HTML 内部修正记录（v2.4，飞书云盘）：03 目录编号错位已修�
 | 08 | spec_batch5_wave.md | 批次5：9张量波规格卡 | 已定稿 |
 | 09 | spec_batch6_combination_technique.md | 批次6：12张组合战法卡 | 已定稿（v1.2，含 D6a 修正） |
 | 10 | spec_batch7_twelve_words.md | 批次7：十二字令3张卡 | 已定稿（v1.2） |
-
-**注意**：spec_data_contract.md 为 v3.0 新建文件，GitHub 上已上传。
 
 v2.6 JSON key 小写化：涉及 spec_global_rules.md（2处）、spec_batch1_basic_volume.md（28处）、spec_batch2_ace_pillar.md（23处），共53处，已同步 GitHub。
 v2.7 spec_batch1 v1.1 澄清：黄金柱规格卡第3节追加"基柱候选的精确判定标准"3行，已同步 GitHub。
@@ -264,7 +262,7 @@ spec_principles.md（公理层）
 | 批次7（十二字令） | 3 | 阳胜柱（yang_sheng_bar）、阴胜柱（yin_sheng_bar）、小倍阳（small_double_yang） |
 | 全局修饰器 | 2 | 位置判定（price_position）、位置-性质映射表（在 spec_global_rules.md 内） |
 
-### 6.5 代码实现成果（v3.1）
+### 6.5 代码实现成果（v3.2）
 
 项目骨架（已建）文件清单：
 
@@ -285,20 +283,32 @@ src/global_rules/price_position.py（位置判定）
 src/utils/__init__.py
 src/utils/data_loader.py（数据加载工具，标题已修正，前复权声明已加）
 tests/__init__.py
-tests/test_high_volume.py
-tests/test_low_volume.py
-tests/test_double_volume.py
-tests/test_flat_volume.py
-tests/test_shrink_volume.py
-tests/test_ladder_volume.py
-tests/test_golden_volume.py
-tests/test_general_volume.py
-tests/test_marshal_volume.py
-tests/test_price_position.py
+tests/test_high_volume.py（7个测试）
+tests/test_low_volume.py（8个测试）
+tests/test_double_volume.py（8个测试）
+tests/test_flat_volume.py（8个测试）
+tests/test_shrink_volume.py（8个测试）
+tests/test_ladder_volume.py（8个测试）
+tests/test_golden_volume.py（13个测试）
+tests/test_general_volume.py（14个测试）
+tests/test_marshal_volume.py（14个测试）
+tests/test_price_position.py（6个测试）
 requirements.txt
-.github/workflows/test.yml
+.github/workflows/test.yml（GitHub Actions 配置）
 
-已完成模块（v3.1）：
+**GitHub 仓库状态（v3.2）：**
+- 仓库地址：https://github.com/chenguanqiao2006/zijian
+- 最新 commit hash：`60e493bd05c1c613d25db17621e49b11ff885aef`
+- 已推送文件：src/（13个）+ tests/（10个）+ requirements.txt + .github/workflows/test.yml
+- 未推送（保留由项目负责人手动维护）：PROJECT_MEMORY.md、specs/ 目录、README.md
+
+**GitHub Actions 首次成功运行（v3.2）：**
+- 触发：push 到 main 分支
+- 运行环境：Python 3.10 + 3.11 双版本
+- 测试结果：**94 passed / 0 failed**（0.27 秒）
+- 日志：测试全绿，CI 首次跑通
+
+已完成模块（v3.2）：
 
 | 模块 | 状态 | 测试数 |
 |:---|:---|:---:|
@@ -309,10 +319,10 @@ requirements.txt
 | 平量柱 | 已实现（含纯判定方法） | 8 |
 | 缩量柱 | 已实现 | 8 |
 | 梯量柱 | 已实现（含纯判定方法） | 8 |
-| 黄金柱 | 已实现（复用4信号卡的纯判定方法） | 11 |
+| 黄金柱 | 已实现（复用4信号卡的纯判定方法） | 13 |
 | 将军柱 | 已实现（复用批次1四纯判定方法） | 14 |
 | 元帅柱 | 已实现（依赖将军柱/黄金柱确认） | 14 |
-| GitHub Actions | 已配置（Python 3.10/3.11双版本） | — |
+| GitHub Actions | 已配置并首次跑通（Python 3.10/3.11） | — |
 
 累计测试结果：94 passed / 0 failed
 
@@ -324,16 +334,16 @@ requirements.txt
 - 各信号卡新增纯判定方法供复合信号复用
 - 位置判定使用基柱日（不是确认日T+3日）
 
-批次2测试补强（v3.1）：
-- 将军柱测试从6条扩至14条（含8条新增边界测试）
-- 元帅柱测试从6条扩至14条（含8条新增边界测试）
-- 边界覆盖率：将军柱 18%→91%；元帅柱 20%→90%
-- 修复1处代码bug：元帅柱"授衔日停牌"边界（原代码未检查T-1日是否为有效交易日）
+**重大能力更新（v3.2）：豆包可 git push**
+- 旧认知：豆包环境无法 push 到 GitHub（档案 v3.1 及之前）
+- 新事实：豆包可 git push，只需提供 GitHub token（需含 `repo` + `workflow` 两个 scope）
+- 意义：代码同步流程大幅简化——豆包写完代码 → 直接 git push 到 GitHub → Actions 自动跑测试
+- 无需再经过"下载 → 手工上传 → 复制粘贴"的链路（该链路此前曾导致换行符丢失）
 
 代码存储位置：
 - 豆包本地工作区：/home/user/.doubao/agent_mode/workspace/量学解盘引擎/
 - 飞书云盘：量学解盘引擎_代码 文件夹
-- GitHub：待同步（豆包环境无法直接 push）
+- GitHub：已同步（commit 60e493b）
 
 ---
 
@@ -354,18 +364,21 @@ requirements.txt
   - 批次2王牌柱完成（将军柱+元帅柱，12测试新增）
   - 前复权处理链调查 + P0/P1修正
   - 边界覆盖矩阵自查（10模块70条边界）
-  - **批次2测试覆盖补强（v3.1）**：将军柱+元帅柱各14条测试，边界覆盖率≥90%
-  - **修复元帅柱"授衔日停牌"代码bug（v3.1）**
+  - 批次2测试覆盖补强（将军柱+元帅柱各14条测试）
+  - 修复元帅柱"授衔日停牌"代码bug
   - 累计测试：94 passed / 0 failed
+  - **GitHub Actions 首次跑通（94/94，Python 3.10 + 3.11）**
+  - **代码已同步 GitHub（commit 60e493b）**
+  - **发现并确认：豆包可 git push（旧认知被推翻）**
 
 代码实现阶段（进行中）：
-- 已完成：骨架 + 位置判定 + 批次1（7张卡）+ 批次2（2张王牌柱，含测试补强）
+- 已完成：骨架 + 位置判定 + 批次1（7张卡）+ 批次2（2张王牌柱）
 - 待完成：批次3（量线绘制规则，8条）
 - 后续：批次4-7 代码实现
 
 ### 7.2 建议优先事项
 
-1. 批次3（量线绘制规则，8条）代码实现
+1. **批次3（量线绘制规则，8条）代码实现**——注意：量线的性质与量柱不同（量柱=检测信号；量线=绘制规则，含取点+画线+有效性）
 2. 每完成一批卡更新档案一次
 
 ### 7.3 未完成项待办
@@ -375,7 +388,6 @@ A. 代码实现待办
 - 批次2王牌柱已完成（含测试补强）
 - 批次3代码实现：8条量线绘制规则（下一步）
 - 批次4-7代码实现（后续批次）
-- 代码需同步到 GitHub（豆包环境无法直接 push）
 
 B. 规格文件内部细节
 - spec_batch7 v1.2 中，阴胜柱/阳胜柱的"当前柱为假阴真阳/假阳真阴"边界情况细节待后续版本补充
@@ -383,6 +395,8 @@ B. 规格文件内部细节
 - spec_global_rules.md 中位置判定的1条极端边界（停牌超过250日区间失效）暂未实现，记入待办
 - 元帅柱"先者优先"（多个王牌柱并存时的去重逻辑）：属于信号应用层功能，待后续做"信号扫描器"时统一处理
 - spec_data_contract.md 第5.2节声称"本文件被 spec_global_rules.md 和所有批次规格卡引用"，但实际 spec_global_rules.md 等文件并未实际引用本文件——需后续统一处理（改第5.2节表述 或 各文件加入引用）
+- spec_batch1_basic_volume.md 黄金柱规格卡测试数：档案记录11个，实际13个（v2.7修复基柱候选复用后新增2个测试）——档案 v3.2 已修正
+- tests/test_golden_volume.py 中 `test_flat_volume_second_as_base` 测试覆盖度弱（仅验证字段存在，未断言 is_signal=True）——记入待办，后续补强
 
 C. 【未能核实】项（已归档，不再投入）
 - 腾龙飞天/双圈/拉拐/替领/龙门擒龙五个高级模型的官方定义（原著正文原文）——终止核实
@@ -395,6 +409,12 @@ D. 操盘节奏类内容（暂停）
 
 E. docs/ 目录（确定不上传，v2.5）
 - docs/ 目录（六本 HTML 理论著作）确定不上传 GitHub；HTML 仅保留飞书云盘副本
+
+F. 代码同步流程（v3.2 已优化）
+- 旧流程：豆包写代码 → 下载到本地 → 手工上传 GitHub → 复制粘贴（易丢换行符）
+- 新流程（v3.2 起）：豆包写代码 → 直接 git push 到 GitHub → Actions 自动跑测试
+- 需向豆包提供 GitHub token（需含 `repo` + `workflow` scope）
+- token 用完可撤销
 
 ---
 
@@ -419,9 +439,9 @@ E. docs/ 目录（确定不上传，v2.5）
 | 能力 | 可审核模型（DeepSeek） | 可联网模型（豆包） |
 |:---|:---|:---|
 | 联网搜索 | 不能主动联网 | 可联网搜索 |
-| 调用工具 | 不能调用工具 | 可写文件、跑代码 |
+| 调用工具 | 不能调用工具 | 可写文件、跑代码、**可 git push（需 GitHub token）** |
 | 会话记忆 | 会话级，有上限 | 会话级，有上限 |
-| 适用场景 | 架构设计、逻辑审核、一致性检查 | 批量生成、联网查证、文件落地 |
+| 适用场景 | 架构设计、逻辑审核、一致性检查 | 批量生成、联网查证、文件落地、代码推送 |
 | 可否提供ISBN/年份/原文 | 绝对不可 | 需交叉验证后提供 |
 
 诚实声明：所有模型都会随对话长度增加而出现幻觉。真相源必须是档案，不是任何模型的记忆。
@@ -429,6 +449,8 @@ E. docs/ 目录（确定不上传，v2.5）
 历史教训（v2.3）：DeepSeek 曾提供未经核实信息（声称"《伏击涨停》第1版刊误表修正小倍阳为1.8-3.0最佳2.0"）。豆包独立核实发现刊误表存在但不含该参数修正，"1.8-3.0最佳2.0"来源为今日头条二次整理文章。该信息已回退。
 
 历史教训（v2.6）：DeepSeek 曾因文本显示问题误判 __init__.py 文件名为 init.py（实际元数据正确）。教训：判定文件名应以元数据为准，不以文本显示为准。
+
+能力更新（v3.2）：豆包可 git push，档案旧认知被推翻。
 
 ---
 
@@ -482,10 +504,12 @@ E. docs/ 目录（确定不上传，v2.5）
 | 44 | 黄金柱基柱候选定义澄清 | 梯量柱第一柱 = 梯量序列起点；平量柱第二柱 = 平量序列第二根 |
 | 45 | 信号卡纯判定方法复用 | 各信号卡新增 is_xxx(data, idx) 纯判定方法，供复合信号（黄金柱）复用 |
 | 46 | 批次2规格歧义处理 | ①元帅柱"先者优先"属于应用层功能，记入待办；②元帅柱 position 用 T日（跳空日/基柱日）；③将军柱 nature 映射按规格卡执行 |
-| 47 | 前复权处理链澄清 | 经调查：data_loader.py 标题虚假（实际无前复权逻辑）；项目无统一数据加载入口；规格层无独立数据契约文件。决策：①P0修正虚假标题；②P1新建spec_data_contract.md；③P2（实现前复权处理链）延后 |
+| 47 | 前复权处理链澄清 | 经调查：data_loader.py 标题虚假；项目无统一数据加载入口；规格层无独立数据契约文件。决策：①P0修正虚假标题；②P1新建spec_data_contract.md；③P2延后 |
 | 48 | 数据契约层引入 | 规格体系新增第13份文件 spec_data_contract.md，位于公理层与全局规则层之间。冲突优先级：数据契约 > 全局规则 > 批次规格卡；公理层最高 |
-| 49 | **批次2测试覆盖补强（v3.1 新增）** | 将军柱测试从6条扩至14条（8条新增边界）；元帅柱测试从6条扩至14条（8条新增边界）；边界覆盖率分别达91%和90%；除权除息日边界豁免（由数据契约层处理） |
-| 50 | **元帅柱授衔日停牌bug修复（v3.1 新增）** | 规格卡第5节第1条要求"跳空判定需跳空前一日为有效交易日"，原代码未检查。修复：在数据异常检查后、后三日停牌检查前，增加 prev_v 检查；data_quality="marshal_day_suspended" |
+| 49 | 批次2测试覆盖补强 | 将军柱测试6→14条、元帅柱测试6→14条，边界覆盖率分别达91%和90% |
+| 50 | 元帅柱授衔日停牌bug修复 | 规格卡第5节第1条要求"跳空判定需跳空前一日为有效交易日"，原代码未检查。修复：在数据异常检查后、后三日停牌检查前，增加 prev_v 检查 |
+| 51 | **豆包 git push 能力确认（v3.2 新增）** | 豆包可执行 git clone / add / commit / push 命令；只需提供 GitHub token（含 `repo` + `workflow` 两个 scope）；旧档案"豆包无法直接 push"认知被推翻 |
+| 52 | **代码同步流程调整（v3.2 新增）** | 从 v3.2 起，代码同步流程简化为：豆包写代码 → 直接 git push 到 GitHub → Actions 自动跑测试；不再经过"下载 → 手工上传 → 复制粘贴"链路（该链路曾导致换行符丢失） |
 
 ---
 
@@ -516,23 +540,24 @@ E. docs/ 目录（确定不上传，v2.5）
 
 - 项目定位：量学解盘引擎（不预测、不交易，只做形态识别与术语转译）
 - 已完成：规格体系（13份文件）+ HTML 6份 + README + 批次1代码（7张卡）+ 批次2代码（2张王牌柱，含测试补强），累计94测试通过
+- GitHub Actions 已首次跑通（94/94，Python 3.10 + 3.11 双版本）
 - 当前阶段：代码实现进行中——批次1+批次2完成，批次3（量线绘制规则）待做
 - 真相源：specs/ 目录下的文件，不是你的记忆
 - 你的职责：按项目负责人的指令，执行规格生成员或规格架构师的工作
-- 特别注意：若你不可联网，不得提供任何需联网核实的原始信息；一切非原著正文信息按 3.1 第9条线索分级处理；每次完成代码文件后须落盘飞书云盘
+- 特别注意：若你不可联网，不得提供任何需联网核实的原始信息；一切非原著正文信息按 3.1 第9条线索分级处理；每次完成代码文件后须落盘飞书云盘（4.1 第7条）；可联网模型可直接 git push 到 GitHub（需 token）
 
 请先输出你的理解确认，再开始执行任务。
 
 ### 10.3 接手检查清单
 
-已完整阅读档案；已理解项目定位；已理解最高准则（零幻觉、规格优先、客观描述、零未来函数、参数时效性、线索分级）；已理解 3.1 第7/8/9条；已理解协作规范（单代码块、一键复制、移动端优先、禁止嵌套、文件名单独成块、JSON key 英文、落盘规则）；已理解档案操作规范；已理解模型能力边界；已确认当前阶段与后续任务；已明确自身职责范围；已准备就绪。
+已完整阅读档案；已理解项目定位；已理解最高准则（零幻觉、规格优先、客观描述、零未来函数、参数时效性、线索分级）；已理解 3.1 第7/8/9条；已理解协作规范（单代码块、一键复制、移动端优先、禁止嵌套、文件名单独成块、JSON key 英文、落盘规则）；已理解档案操作规范；已理解模型能力边界（含 v3.2 新增：豆包可 git push）；已确认当前阶段与后续任务；已明确自身职责范围；已准备就绪。
 
 ---
 
 ## 十一、项目文件结构
 
 量学解盘引擎/
-├── PROJECT_MEMORY.md          （档案，项目知识库）
+├── PROJECT_MEMORY.md          （档案，项目知识库，手动维护）
 ├── README.md                  （项目说明）
 ├── docs/                      （理论著作，确定不上传GitHub；仅飞书云盘）
 │   ├── 01_量柱擒涨停_纯理论版.html
@@ -541,24 +566,24 @@ E. docs/ 目录（确定不上传，v2.5）
 │   ├── 04_伏击涨停_纯理论版.html     （已修正出版信息）
 │   ├── 05_涨停密码_纯理论版.html     （已修正出版信息）
 │   └── 06_操盘手记_主题索引导读.html
-├── specs/                     （规格说明书，13份文件）
-│   ├── spec_principles.md     （公理层）
-│   ├── spec_data_contract.md  （数据契约层）
-│   ├── spec_global_rules.md   （全局规则层）
-│   ├── spec_batch1_basic_volume.md   （批次1，v1.1）
-│   ├── spec_batch1_addendum.md       （批次1补充v1）
-│   ├── spec_batch1_addendum_v2.md    （批次1补充v2）
-│   ├── spec_batch2_ace_pillar.md     （批次2）
-│   ├── spec_batch3_price_line.md     （批次3）
-│   ├── spec_batch4_line_technique.md （批次4）
-│   ├── spec_batch5_wave.md           （批次5）
-│   ├── spec_batch6_combination_technique.md  （批次6）
-│   └── spec_batch7_twelve_words.md   （批次7）
-├── src/                       （代码实现，批次1+批次2完成）
+├── specs/                     （规格说明书，13份文件，手动维护）
+│   ├── spec_principles.md
+│   ├── spec_data_contract.md
+│   ├── spec_global_rules.md
+│   ├── spec_batch1_basic_volume.md
+│   ├── spec_batch1_addendum.md
+│   ├── spec_batch1_addendum_v2.md
+│   ├── spec_batch2_ace_pillar.md
+│   ├── spec_batch3_price_line.md
+│   ├── spec_batch4_line_technique.md
+│   ├── spec_batch5_wave.md
+│   ├── spec_batch6_combination_technique.md
+│   └── spec_batch7_twelve_words.md
+├── src/                       （代码实现，已同步GitHub）
 │   ├── __init__.py
 │   ├── signals/
 │   │   ├── __init__.py
-│   │   ├── base.py           （含输入约束声明）
+│   │   ├── base.py
 │   │   ├── high_volume.py
 │   │   ├── low_volume.py
 │   │   ├── double_volume.py
@@ -574,7 +599,7 @@ E. docs/ 目录（确定不上传，v2.5）
 │   └── utils/
 │       ├── __init__.py
 │       └── data_loader.py
-├── tests/                     （测试用例，94测试通过）
+├── tests/                     （测试用例，94测试通过，已同步GitHub）
 │   ├── __init__.py
 │   ├── test_high_volume.py
 │   ├── test_low_volume.py
@@ -583,13 +608,13 @@ E. docs/ 目录（确定不上传，v2.5）
 │   ├── test_shrink_volume.py
 │   ├── test_ladder_volume.py
 │   ├── test_golden_volume.py
-│   ├── test_general_volume.py   （14测试）
-│   ├── test_marshal_volume.py   （14测试）
+│   ├── test_general_volume.py
+│   ├── test_marshal_volume.py
 │   └── test_price_position.py
 ├── requirements.txt
 └── .github/
     └── workflows/
-        └── test.yml           （GitHub Actions 配置）
+        └── test.yml
 
 待建（后续代码实现）：
 - src/signals/ 下批次3-7的对应模块
@@ -605,8 +630,9 @@ E. docs/ 目录（确定不上传，v2.5）
 | v2.7 | 2026-10-06 | 批次1代码全部完成：7张卡实现完成，累计66 passed / 0 failed。修复2处规格偏差：黄金柱阳胜柱简化、黄金柱基柱候选简化。spec_batch1 v1.0→v1.1：追加基柱候选精确定义。9章新增决策44、45。 |
 | v2.8 | 2026-10-06 | 档案瘦身：单次可输出。第六章信号清单改表格；第九章决策保留一行一条；第十二章v1.0-v2.6合并为摘要；内部消除嵌套三反引号（文件树用纯文本）。保证新窗口无缝接手。 |
 | v2.9 | 2026-10-06 | 批次2王牌柱代码完成：将军柱（6测试）、元帅柱（6测试）实现完成，累计78 passed / 0 failed。修正位置判定口径（将军柱/元帅柱使用基柱日而非确认日T+3日）。7.1阶段任务更新；7.3待办更新；9章新增决策46。 |
-| v3.0 | 2026-10-06 | 边界覆盖矩阵自查 + 前复权处理链调查 + P0/P1修正：①边界覆盖矩阵（10模块70条边界，实现率85.7%、测试覆盖率44.3%）；②前复权处理链调查发现 data_loader.py 虚假标题、项目无统一数据加载入口、规格层无独立数据契约文件；③P0修正：data_loader.py 标题修正 + 基础声明新增，base.py 输入约束声明新增；④P1新建：spec_data_contract.md（数据契约层，第13份规格文件），修正5.3节冲突处理逻辑矛盾。9章新增决策47、48。 |
-| v3.1 | 2026-10-06 | 批次2测试覆盖补强 + 元帅柱bug修复：①将军柱测试6→14条、元帅柱测试6→14条，边界覆盖率分别达91%和90%；②修复元帅柱"授衔日停牌"边界bug（原代码未检查T-1日是否为有效交易日）；③累计测试94 passed / 0 failed。6.5更新为v3.1；7.1阶段任务更新；7.3 A项移除"批次2测试覆盖补强"；9章新增决策49（批次2测试覆盖补强）、50（元帅柱授衔日停牌bug修复） |
+| v3.0 | 2026-10-06 | 边界覆盖矩阵自查 + 前复权处理链调查 + P0/P1修正：①边界覆盖矩阵（10模块70条边界）；②前复权处理链调查发现 data_loader.py 虚假标题；③P0修正：data_loader.py 标题修正 + base.py 输入约束声明新增；④P1新建：spec_data_contract.md（数据契约层，第13份规格文件）。9章新增决策47、48。 |
+| v3.1 | 2026-10-06 | 批次2测试覆盖补强 + 元帅柱bug修复：①将军柱测试6→14条、元帅柱测试6→14条；②修复元帅柱"授衔日停牌"边界bug；③累计测试94 passed / 0 failed。9章新增决策49、50。 |
+| v3.2 | 2026-10-06 | **代码同步 GitHub + GitHub Actions 首次跑通**：①代码已同步 GitHub（commit 60e493b，含 src/13个 + tests/10个 + requirements.txt + .github/workflows/test.yml）；②GitHub Actions 首次成功运行，94 passed / 0 failed（Python 3.10 + 3.11 双版本）；③**发现并确认：豆包可 git push（旧认知被推翻）**；④代码同步流程调整（豆包直接 push，不再经手工链路）。6.5大幅更新；7.1阶段任务更新；7.3新增B/C项细节待办 + F项代码同步流程；8.3模型能力边界更新；9章新增决策51（豆包git push能力确认）、52（代码同步流程调整） |
 
 ---
 
