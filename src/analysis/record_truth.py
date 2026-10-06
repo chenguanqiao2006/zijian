@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v2.6（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v2.7（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -76,6 +76,13 @@ v2.6 相对 v2.5 的变更（移植 yaox2004-web/one v3.0 核心能力）：
            便于回测时按口径过滤。
     设计原则：判定逻辑（verdict/is_real/quant_pct）采用双轨+校准阈值，
     与 v2.5 不兼容（阈值变更）；新增行为指纹字段只记录不入投票。
+
+v2.7 相对 v2.6 的变更（大盘量比，移植 yaox v3.0）：
+    [新增] market_vol_ratio  大盘量比 —— 上证指数当日成交量 / 过去5日平均成交量。
+           >1=大盘放量，<1=大盘缩量。用于区分"个股放量是跟随大盘还是独立行情"。
+           数据来源：data/kline/sh/sh000001.json（上证指数日线，需提前拉取）。
+           若指数日线数据缺失，该字段为 None，不影响其他判定。
+    设计原则：只记录不入投票，先积累数据再做阈值体检。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -155,6 +162,9 @@ PM_MIN_MOVE = 0.001       # 午后反转判定的最小波动（0.1%）
 
 # --- v2.6 指数不入账本 ---
 INDEX_CODES = {"sh000001", "sz399001", "sz399006"}
+
+# --- v2.7 大盘量比参数 ---
+MARKET_VOL_LOOKBACK = 5  # 大盘量比的回看天数（过去5日平均成交量）
 
 
 # ---------------------------------------------------------------------------
@@ -824,7 +834,7 @@ def compute_quant_pct(cv, corr, tail_ratio, flatness):
     return round(sum(contribs) / len(contribs), 1)
 
 
-def analyze_day(bars, code, prev_close, history_data=None):
+def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None):
     """分析单日1分钟K线，返回账本条目。
 
     v2.6 变更：
@@ -833,12 +843,17 @@ def analyze_day(bars, code, prev_close, history_data=None):
     - 新增行为指纹：vwap_hold_ratio / weave_score / pm_reversal
     - 新增 verdict_basis 字段："相对分位"或"绝对阈值"
 
+    v2.7 变更：
+    - 新增 market_vol_ratio 参数：大盘量比（上证指数当日量/过去5日均量）
+    - 新增 market_vol_ratio 返回字段
+
     参数：
         bars: 1分钟K线列表（字典格式，含 open/high/low/close/volume/time）
         code: 股票代码
         prev_close: 前一交易日收盘价
         history_data: 可选，历史数据字典 {'cv': [...], 'corr': [...], 'tail_ratio': [...]}
                       用于相对分位判定；为None时用绝对阈值兜底
+        market_vol_ratio: 可选，大盘量比（当日上证指数成交量/过去5日均量）
     """
     volumes = [b['volume'] for b in bars]
     total_vol = sum(volumes)
@@ -951,6 +966,8 @@ def analyze_day(bars, code, prev_close, history_data=None):
         'vwap_hold_ratio': vwap_hold_ratio,
         'weave_score': weave_score,
         'pm_reversal': pm_reversal,
+        # --- v2.7 新增：大盘量比 ---
+        'market_vol_ratio': market_vol_ratio,
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1091,6 +1108,10 @@ def print_summary(stats: dict):
     # v2.6 指数跳过
     if stats.get('skipped_index'):
         print(f'  指数跳过: {stats["skipped_index"]} 个文件')
+    # --- v2.7 大盘量比均值 ---
+    if stats.get('mvr_n'):
+        print(f'  指标均值: market_vol_ratio={stats["mvr_sum"] / stats["mvr_n"]:.2f} '
+              f'(>1放量, <1缩量)')
     print(f'{line}\n')
 
 
@@ -1099,16 +1120,20 @@ def print_summary(stats: dict):
 # ---------------------------------------------------------------------------
 
 def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
-                 history_store: dict = None) -> list:
+                 history_store: dict = None, market_vol_store: dict = None) -> list:
     """处理单个1分钟K线文件。
 
     v2.6 变更：
     - 指数不入账本（INDEX_CODES）
     - 传入 history_store 用于相对分位判定
 
+    v2.7 变更：
+    - 传入 market_vol_store 用于大盘量比
+
     参数：
         history_store: 可选，历史数据存储 {code: [(date, cv, corr, tail_ratio), ...]}
                        按日期升序排列；为None时所有判定用绝对阈值兜底
+        market_vol_store: 可选，大盘量比存储 {date: market_vol_ratio}
     """
     code = resolve_code(path)
     if is_bj(code):
@@ -1154,7 +1179,11 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
                     'tail_ratio': [x[3] for x in prior],
                 }
 
-        entry = analyze_day(bars, code, prev_close, history_data=history_data)
+        # v2.7 提取当日大盘量比
+        mvr = market_vol_store.get(date) if market_vol_store else None
+
+        entry = analyze_day(bars, code, prev_close, history_data=history_data,
+                            market_vol_ratio=mvr)
         if entry is None:
             stats['skipped_bad'] += 1
             continue
@@ -1223,8 +1252,61 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         vb = entry.get('verdict_basis')
         if vb:
             stats['basis_counts'][vb] = stats['basis_counts'].get(vb, 0) + 1
+        # v2.7 大盘量比累加
+        mvr = entry.get('market_vol_ratio')
+        if mvr is not None:
+            stats['mvr_sum'] += mvr
+            stats['mvr_n'] += 1
 
     return entries
+
+
+def load_market_volume(kline_dir_path: Path = None) -> dict:
+    """v2.7 加载上证指数日线，计算每日大盘量比。
+
+    大盘量比 = 当日成交量 / 过去 MARKET_VOL_LOOKBACK(5) 日平均成交量。
+    >1=大盘放量，<1=大盘缩量。
+
+    数据来源：data/kline/sh/sh000001.json（上证指数日线）。
+    数据格式：[[date, open, close, high, low, volume], ...]
+
+    返回：{date_str: market_vol_ratio}，日期格式 YYYY-MM-DD。
+    若指数日线数据缺失或加载失败，返回空 dict。
+    """
+    if kline_dir_path is None:
+        kline_dir_path = kline_dir()  # 经目录宪法
+    path = kline_dir_path / "sh" / "sh000001.json"
+    if not path.exists():
+        print('[大盘量比] 上证指数日线数据缺失，market_vol_ratio 将为空')
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        # 兼容两种格式：list 或 dict（含 'klines' 键）
+        if isinstance(data, dict):
+            klines = data.get('klines', data.get('data', []))
+        else:
+            klines = data
+        if not klines:
+            print('[大盘量比] 上证指数日线数据为空')
+            return {}
+        dates, vols = [], []
+        for k in klines:
+            try:
+                dates.append(str(k[0])[:10])  # 日期
+                vols.append(float(k[5]))       # 成交量
+            except Exception:
+                continue
+        out = {}
+        for i in range(len(dates)):
+            prev = vols[max(0, i - MARKET_VOL_LOOKBACK):i]
+            if prev and sum(prev) > 0:
+                out[dates[i]] = round(vols[i] / (sum(prev) / len(prev)), 2)
+        print(f'[大盘量比] 指数量比就绪: {len(out)} 天')
+        return out
+    except Exception as e:
+        print(f'[大盘量比] 加载失败: {e}')
+        return {}
 
 
 def load_history_store(ledger_dir_path: Path) -> dict:
@@ -1264,7 +1346,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v2.6（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v2.7（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -1284,6 +1366,8 @@ def main():
         'og_sum', 'og_n',
         # v2.6 新增：行为指纹
         'vhr_sum', 'vhr_n', 'ws_sum', 'ws_n', 'pmr_sum', 'pmr_n',
+        # v2.7 新增：大盘量比
+        'mvr_sum', 'mvr_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
@@ -1307,8 +1391,13 @@ def main():
     print(f'[INFO] 历史账本: {hist_codes} 只股票, {hist_records} 条记录 '
           f'(≥{MIN_HISTORY_FOR_RELATIVE}天启用相对分位判定)')
 
+    # v2.7 加载大盘量比（上证指数日线）
+    market_vol_store = load_market_volume()
+
     for path in files:
-        entries = process_file(path, ledger, stats, args.dry_run, history_store=history_store)
+        entries = process_file(path, ledger, stats, args.dry_run,
+                               history_store=history_store,
+                               market_vol_store=market_vol_store)
         # --dry-run 与 --no-delete 都不进入删除分支
         if not entries or args.dry_run or args.no_delete:
             continue

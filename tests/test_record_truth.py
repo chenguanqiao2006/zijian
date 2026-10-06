@@ -35,6 +35,7 @@ from src.analysis.record_truth import (
     compute_flat_vol_ratio, compute_tail_gain,
     compute_big_order_stats, compute_pattern_stats,
     _pct_rank, compute_vwap_hold_ratio, compute_weave_score, compute_pm_reversal,
+    load_market_volume,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -853,6 +854,77 @@ class TestV26IndexFilter:
         assert CV_ABS_QUANT == 0.95
         assert TAIL_ABS_QUANT == 0.22
         assert CORR_ABS_QUANT == 0.30
+
+
+# ---------------------------------------------------------------------------
+# v2.7 新信号：大盘量比
+# ---------------------------------------------------------------------------
+
+class TestV27MarketVolRatio:
+    def test_analyze_day_with_market_vol_ratio(self):
+        # analyze_day 接收 market_vol_ratio 参数并返回该字段
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0, market_vol_ratio=1.25)
+        assert entry is not None
+        assert entry['market_vol_ratio'] == 1.25
+
+    def test_analyze_day_without_market_vol_ratio(self):
+        # 不传 market_vol_ratio 时为 None
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        assert entry['market_vol_ratio'] is None
+
+    def test_load_market_volume_missing_file(self, tmp_path):
+        # 指数日线文件不存在时返回空 dict
+        result = load_market_volume(tmp_path)
+        assert result == {}
+
+    def test_load_market_volume_with_data(self, tmp_path):
+        # 构造模拟指数日线数据，验证量比计算
+        import json
+        sh_dir = tmp_path / "sh"
+        sh_dir.mkdir()
+        # 构造10天数据，前5天量=100，第6天量=150（量比=150/100=1.5）
+        klines = []
+        for i in range(10):
+            date = f'2026-09-{i+1:02d}'
+            vol = 150 if i == 5 else 100
+            klines.append([date, 100, 100, 100, 100, float(vol)])
+        with open(sh_dir / "sh000001.json", 'w') as f:
+            json.dump(klines, f)
+
+        result = load_market_volume(tmp_path)
+        assert len(result) > 0
+        # 第6天（2026-09-06）量比 = 150 / 100 = 1.5
+        assert result.get('2026-09-06') == 1.5
+
+    def test_market_vol_ratio_lookback_constant(self):
+        # 大盘量比回看天数常量
+        from src.analysis.record_truth import MARKET_VOL_LOOKBACK
+        assert MARKET_VOL_LOOKBACK == 5
+
+    def test_market_vol_ratio_high_vs_low(self):
+        # 大盘放量 vs 缩量的边界值
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        # 放量
+        entry_high = analyze_day(bars, 'sh600519', 100.0, market_vol_ratio=1.5)
+        assert entry_high['market_vol_ratio'] > 1.0
+        # 缩量
+        entry_low = analyze_day(bars, 'sh600519', 100.0, market_vol_ratio=0.7)
+        assert entry_low['market_vol_ratio'] < 1.0
 
 
 if __name__ == '__main__':
