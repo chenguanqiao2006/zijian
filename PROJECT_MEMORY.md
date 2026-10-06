@@ -5,7 +5,7 @@
 > 文档简称代号：档案。
 > 使用规则：任何大语言模型参与本项目前，须完整阅读本文档。
 > 维护责任：每次任务完成后，更新第七章（当前阶段）与第十二章（版本记录）。
-> 当前版本：v2.9
+> 当前版本：v3.0
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### 1.3 输入与输出
 
-- 输入：股票或指数的历史K线数据（日线/分钟线）
+- 输入：股票或指数的历史K线数据（日线/分钟线），必须为前复权数据
 - 处理：依据形式化规格（Specification）自动识别量学定义的形态结构
 - 输出：以量学术语体系撰写的客观描述报告
 
@@ -214,37 +214,42 @@ HTML 存储策略（v2.5 确定）：六本 HTML 不上传 GitHub，仅保留飞
 
 HTML 内部修正记录（v2.4，飞书云盘）：03 目录编号错位已修正；04/05《量波逮涨停》出版月份（7月→6月）+ ISBN（【未能核实】→9787519609832）已修正。
 
-### 6.2 规格体系工程（12份文件，已上传 GitHub）
+### 6.2 规格体系工程（13份文件，GitHub 同步中）
 
 | 序号 | 文件名 | 定位 | 状态 |
 |:---:|:---|:---|:---|
 | 01 | spec_principles.md | 底层原则文件（公理层） | 已定稿（v1.0 + D4修正） |
-| 02 | spec_global_rules.md | 全局规则文件 | 已定稿（v1.0 + v2.6 JSON key小写化） |
-| 03 | spec_batch1_basic_volume.md | 批次1：7张基础量柱卡 | 已定稿（v1.1，含 v2.6/v2.7 修正） |
-| 03a | spec_batch1_addendum.md | 批次1补充v1 | 已定稿 |
-| 03b | spec_batch1_addendum_v2.md | 批次1补充v2 | 已定稿 |
-| 04 | spec_batch2_ace_pillar.md | 批次2：将军柱、元帅柱 | 已定稿（含 v2.6 JSON key小写化） |
-| 05 | spec_batch3_price_line.md | 批次3：8条量线绘制规则 | 已定稿（含 D5 版本标注） |
-| 06 | spec_batch4_line_technique.md | 批次4：10张量线战法卡 | 已定稿 |
-| 07 | spec_batch5_wave.md | 批次5：9张量波规格卡 | 已定稿 |
-| 08 | spec_batch6_combination_technique.md | 批次6：12张组合战法卡 | 已定稿（v1.2，含 D6a 修正） |
-| 09 | spec_batch7_twelve_words.md | 批次7：十二字令3张卡 | 已定稿（v1.2） |
+| 02 | spec_data_contract.md | 数据输入契约（数据契约层） | 已定稿（v1.0，v3.0新建） |
+| 03 | spec_global_rules.md | 全局规则文件 | 已定稿（v1.0 + v2.6 JSON key小写化） |
+| 04 | spec_batch1_basic_volume.md | 批次1：7张基础量柱卡 | 已定稿（v1.1，含 v2.6/v2.7 修正） |
+| 04a | spec_batch1_addendum.md | 批次1补充v1 | 已定稿 |
+| 04b | spec_batch1_addendum_v2.md | 批次1补充v2 | 已定稿 |
+| 05 | spec_batch2_ace_pillar.md | 批次2：将军柱、元帅柱 | 已定稿（含 v2.6 JSON key小写化） |
+| 06 | spec_batch3_price_line.md | 批次3：8条量线绘制规则 | 已定稿（含 D5 版本标注） |
+| 07 | spec_batch4_line_technique.md | 批次4：10张量线战法卡 | 已定稿 |
+| 08 | spec_batch5_wave.md | 批次5：9张量波规格卡 | 已定稿 |
+| 09 | spec_batch6_combination_technique.md | 批次6：12张组合战法卡 | 已定稿（v1.2，含 D6a 修正） |
+| 10 | spec_batch7_twelve_words.md | 批次7：十二字令3张卡 | 已定稿（v1.2） |
+
+**注意**：spec_data_contract.md 为 v3.0 新建文件，GitHub 上尚不存在，需项目负责人首次上传。
 
 v2.6 JSON key 小写化：涉及 spec_global_rules.md（2处）、spec_batch1_basic_volume.md（28处）、spec_batch2_ace_pillar.md（23处），共53处，已同步 GitHub。
 v2.7 spec_batch1 v1.1 澄清：黄金柱规格卡第3节追加"基柱候选的精确判定标准"3行，已同步 GitHub。
+v3.0 spec_data_contract 修正：5.3节第2条改为"以本文件为准（数据契约优先于全局规则）"，与5.1层级图方向一致。
 
 ### 6.3 规格体系分层结构
 
 spec_principles.md（公理层）
-  → spec_global_rules.md（全局规则层）
-    → 批次1（7张基础量柱卡）→ spec_batch1_addendum.md（v1）→ spec_batch1_addendum_v2.md（v2）
-    → 批次2（将军柱、元帅柱）
-    → 批次3（8条量线绘制规则）
-    → 批次4（10张量线战法卡）
-    → 批次5（9张量波规格卡）
-    → 批次6（12张组合战法卡）
-    → 批次7（3张十二字令卡）
-    → 后续批次（待建）
+  → spec_data_contract.md（数据契约层）
+    → spec_global_rules.md（全局规则层）
+      → 批次1（7张基础量柱卡）→ spec_batch1_addendum.md（v1）→ spec_batch1_addendum_v2.md（v2）
+      → 批次2（将军柱、元帅柱）
+      → 批次3（8条量线绘制规则）
+      → 批次4（10张量线战法卡）
+      → 批次5（9张量波规格卡）
+      → 批次6（12张组合战法卡）
+      → 批次7（3张十二字令卡）
+      → 后续批次（待建）
 
 ### 6.4 已完成信号清单
 
@@ -259,13 +264,13 @@ spec_principles.md（公理层）
 | 批次7（十二字令） | 3 | 阳胜柱（yang_sheng_bar）、阴胜柱（yin_sheng_bar）、小倍阳（small_double_yang） |
 | 全局修饰器 | 2 | 位置判定（price_position）、位置-性质映射表（在 spec_global_rules.md 内） |
 
-### 6.5 代码实现成果（v2.9 更新）
+### 6.5 代码实现成果（v3.0）
 
 项目骨架（已建）文件清单：
 
 src/__init__.py
 src/signals/__init__.py（导出9个信号类）
-src/signals/base.py（信号卡抽象基类）
+src/signals/base.py（信号卡抽象基类，已加输入数据约束声明）
 src/signals/high_volume.py（高量柱）
 src/signals/low_volume.py（低量柱）
 src/signals/double_volume.py（倍量柱）
@@ -278,7 +283,7 @@ src/signals/marshal_volume.py（元帅柱）
 src/global_rules/__init__.py
 src/global_rules/price_position.py（位置判定）
 src/utils/__init__.py
-src/utils/data_loader.py（数据加载工具）
+src/utils/data_loader.py（数据加载工具，标题已修正，前复权声明已加）
 tests/__init__.py
 tests/test_high_volume.py
 tests/test_low_volume.py
@@ -293,7 +298,7 @@ tests/test_price_position.py
 requirements.txt
 .github/workflows/test.yml
 
-已完成模块（v2.9）：
+已完成模块（v3.0）：
 
 | 模块 | 状态 | 测试数 |
 |:---|:---|:---:|
@@ -331,8 +336,8 @@ requirements.txt
 ### 7.1 阶段任务
 
 已完成：
-- 公理层 + 全局规则层 + 批次1（含补充v1/v2）+ 批次2 + 批次3 + 批次4 + 批次5 + 批次6 + 批次7
-- 四层规格体系 + 十二字令操作准则层全部完成
+- 公理层 + 数据契约层 + 全局规则层 + 批次1-7（13份规格文件）
+- 四层规格体系 + 数据契约层 + 十二字令操作准则层全部完成
 - 6份 HTML 内部修正完成（飞书云盘）
 - README.md 补充完成
 - JSON key 小写化（规格文件 53 处修正）
@@ -344,22 +349,27 @@ requirements.txt
   - 累计测试：78 passed / 0 failed
   - 修复2处规格偏差（黄金柱阳胜柱简化、黄金柱基柱候选简化）
   - 修正位置判定口径（用基柱日，非确认日）
+  - 前复权处理链调查：发现 data_loader.py 虚假标题问题
+  - P0 修正：data_loader.py 标题修正 + base.py 输入约束声明
+  - P1 新建：spec_data_contract.md（数据契约层，第13份规格文件）
 
 代码实现阶段（进行中）：
 - 已完成：骨架 + 位置判定 + 批次1（7张卡）+ 批次2（2张王牌柱）
-- 待完成：批次3（量线绘制规则，8条）
-- 后续：批次4-7 代码实现
+- 待完成：批次2测试覆盖补强（当前测试覆盖严重不足）
+- 后续：批次3-7 代码实现
 
 ### 7.2 建议优先事项
 
-1. 继续代码实现：批次3（量线绘制规则）——8条量线
-2. 每完成一批卡更新档案一次
+1. 补强批次2测试覆盖（将军柱2/11、元帅柱2/10，严重不足）
+2. 批次3（量线绘制规则，8条）代码实现
+3. 每完成一批卡更新档案一次
 
 ### 7.3 未完成项待办
 
 A. 代码实现待办
 - 批次1全部7张卡已完成
-- 批次2王牌柱已完成
+- 批次2王牌柱已完成（测试覆盖需补强）
+- 批次2测试覆盖补强：将军柱+元帅柱边界测试（目标覆盖 P1 优先级）
 - 批次3代码实现：8条量线绘制规则（下一步）
 - 批次4-7代码实现（后续批次）
 - 代码需同步到 GitHub（豆包环境无法直接 push）
@@ -369,6 +379,7 @@ B. 规格文件内部细节
 - spec_batch5 中量波信号的"分时零未来函数"验证机制待代码实现时建立
 - spec_global_rules.md 中位置判定的1条极端边界（停牌超过250日区间失效）暂未实现，记入待办
 - 元帅柱"先者优先"（多个王牌柱并存时的去重逻辑）：属于信号应用层功能，待后续做"信号扫描器"时统一处理
+- **spec_data_contract.md 第5.2节声称"本文件被 spec_global_rules.md 和所有批次规格卡引用"，但实际 spec_global_rules.md 等文件并未实际引用本文件**——需后续统一处理（改第5.2节表述 或 各文件加入引用）
 
 C. 【未能核实】项（已归档，不再投入）
 - 腾龙飞天/双圈/拉拐/替领/龙门擒龙五个高级模型的官方定义（原著正文原文）——终止核实
@@ -465,9 +476,11 @@ E. docs/ 目录（确定不上传，v2.5）
 | 41 | JSON key 严格小写化 | 所有 JSON 代码块内的 key 必须为严格小写 snake_case |
 | 42 | 落盘规则 | 可联网模型每次完成文件后，必须先保存到飞书云盘再回报 |
 | 43 | 文件名判定以元数据为准 | 判定文件是否存在、名称是否正确，应以元数据为准 |
-| 44 | 黄金柱基柱候选定义澄清 | 梯量柱第一柱 = 梯量序列起点；平量柱第二柱 = 平量序列第二根；spec_batch1 v1.1 已追加 |
+| 44 | 黄金柱基柱候选定义澄清 | 梯量柱第一柱 = 梯量序列起点；平量柱第二柱 = 平量序列第二根 |
 | 45 | 信号卡纯判定方法复用 | 各信号卡新增 is_xxx(data, idx) 纯判定方法，供复合信号（黄金柱）复用 |
-| 46 | 批次2规格歧义处理（v2.9 新增） | ①元帅柱"先者优先"属于应用层功能，记入待办；②元帅柱 position 用 T日（跳空日/基柱日），按规格卡第7节原文；③将军柱 nature 映射按规格卡执行。3项均不改代码、不改规格 |
+| 46 | 批次2规格歧义处理 | ①元帅柱"先者优先"属于应用层功能，记入待办；②元帅柱 position 用 T日（跳空日/基柱日）；③将军柱 nature 映射按规格卡执行 |
+| 47 | 前复权处理链澄清（v3.0 新增） | 经调查发现：data_loader.py 标题虚假（声称"前复权处理"但实际无任何逻辑）；项目无统一数据加载入口；输入数据全靠 Mock；规格层无独立数据契约文件。决策：①P0 修正虚假标题；②P1 新建 spec_data_contract.md（数据契约层）；③P2（实现前复权处理链）延后至真实数据接入时做 |
+| 48 | 数据契约层引入（v3.0 新增） | 规格体系新增第13份文件 spec_data_contract.md，位于公理层与全局规则层之间，规定所有信号卡的输入数据必须为前复权数据。冲突优先级：数据契约 > 全局规则 > 批次规格卡；公理层最高 |
 
 ---
 
@@ -476,7 +489,7 @@ E. docs/ 目录（确定不上传，v2.5）
 ### 10.1 标准流程
 
 1. 完整阅读档案（PROJECT_MEMORY.md）
-2. 依次阅读 specs/ 目录下的文件（优先级：principles → global_rules → 各批次 → 各补充说明）
+2. 依次阅读 specs/ 目录下的文件（优先级：principles → data_contract → global_rules → 各批次 → 各补充说明）
 3. 确认当前阶段（第七章）
 4. 确认后续任务（第七章 7.2）
 5. 遵守最高准则（第三章）与协作规范（第四章）
@@ -497,8 +510,8 @@ E. docs/ 目录（确定不上传，v2.5）
 如果你正在读这段文字，说明你已被指派接手本项目。请确认：
 
 - 项目定位：量学解盘引擎（不预测、不交易，只做形态识别与术语转译）
-- 已完成：规格体系（12份文件）+ HTML 6份 + README + 批次1代码（7张卡）+ 批次2代码（2张王牌柱），累计78测试通过
-- 当前阶段：代码实现进行中——批次1+批次2完成，批次3（量线绘制规则）待做
+- 已完成：规格体系（13份文件）+ HTML 6份 + README + 批次1代码（7张卡）+ 批次2代码（2张王牌柱），累计78测试通过
+- 当前阶段：代码实现进行中——批次1+批次2完成，批次2测试覆盖需补强，批次3（量线绘制规则）待做
 - 真相源：specs/ 目录下的文件，不是你的记忆
 - 你的职责：按项目负责人的指令，执行规格生成员或规格架构师的工作
 - 特别注意：若你不可联网，不得提供任何需联网核实的原始信息；一切非原著正文信息按 3.1 第9条线索分级处理；每次完成代码文件后须落盘飞书云盘
@@ -523,38 +536,39 @@ E. docs/ 目录（确定不上传，v2.5）
 │   ├── 04_伏击涨停_纯理论版.html     （已修正出版信息）
 │   ├── 05_涨停密码_纯理论版.html     （已修正出版信息）
 │   └── 06_操盘手记_主题索引导读.html
-├── specs/                     （规格说明书，12份文件）
-│   ├── spec_principles.md
-│   ├── spec_global_rules.md
-│   ├── spec_batch1_basic_volume.md
-│   ├── spec_batch1_addendum.md
-│   ├── spec_batch1_addendum_v2.md
-│   ├── spec_batch2_ace_pillar.md
-│   ├── spec_batch3_price_line.md
-│   ├── spec_batch4_line_technique.md
-│   ├── spec_batch5_wave.md
-│   ├── spec_batch6_combination_technique.md
-│   └── spec_batch7_twelve_words.md
+├── specs/                     （规格说明书，13份文件）
+│   ├── spec_principles.md     （公理层）
+│   ├── spec_data_contract.md  （数据契约层，v3.0新建）
+│   ├── spec_global_rules.md   （全局规则层）
+│   ├── spec_batch1_basic_volume.md   （批次1，v1.1）
+│   ├── spec_batch1_addendum.md       （批次1补充v1）
+│   ├── spec_batch1_addendum_v2.md    （批次1补充v2）
+│   ├── spec_batch2_ace_pillar.md     （批次2）
+│   ├── spec_batch3_price_line.md     （批次3）
+│   ├── spec_batch4_line_technique.md （批次4）
+│   ├── spec_batch5_wave.md           （批次5）
+│   ├── spec_batch6_combination_technique.md  （批次6）
+│   └── spec_batch7_twelve_words.md   （批次7）
 ├── src/                       （代码实现，批次1+批次2完成）
 │   ├── __init__.py
 │   ├── signals/
 │   │   ├── __init__.py
-│   │   ├── base.py
-│   │   ├── high_volume.py    （完成）
-│   │   ├── low_volume.py     （完成）
-│   │   ├── double_volume.py  （完成）
-│   │   ├── flat_volume.py    （完成）
-│   │   ├── shrink_volume.py  （完成）
-│   │   ├── ladder_volume.py  （完成）
-│   │   ├── golden_volume.py  （完成）
-│   │   ├── general_volume.py （完成）
-│   │   └── marshal_volume.py （完成）
+│   │   ├── base.py           （已加输入约束声明）
+│   │   ├── high_volume.py
+│   │   ├── low_volume.py
+│   │   ├── double_volume.py
+│   │   ├── flat_volume.py
+│   │   ├── shrink_volume.py
+│   │   ├── ladder_volume.py
+│   │   ├── golden_volume.py
+│   │   ├── general_volume.py
+│   │   └── marshal_volume.py
 │   ├── global_rules/
 │   │   ├── __init__.py
-│   │   └── price_position.py （完成）
+│   │   └── price_position.py
 │   └── utils/
 │       ├── __init__.py
-│       └── data_loader.py
+│       └── data_loader.py    （标题已修正）
 ├── tests/                     （测试用例，78测试通过）
 │   ├── __init__.py
 │   ├── test_high_volume.py
@@ -573,7 +587,7 @@ E. docs/ 目录（确定不上传，v2.5）
         └── test.yml           （GitHub Actions 配置）
 
 待建（后续代码实现）：
-- src/signals/ 下批次3-7的对应模块（量线绘制、量线战法、量波、组合战法、十二字令）
+- src/signals/ 下批次3-7的对应模块
 - 其余批次代码
 
 ---
@@ -586,6 +600,7 @@ E. docs/ 目录（确定不上传，v2.5）
 | v2.7 | 2026-10-06 | 批次1代码全部完成：7张卡实现完成，累计66 passed / 0 failed。修复2处规格偏差：黄金柱阳胜柱简化、黄金柱基柱候选简化。spec_batch1 v1.0→v1.1：追加基柱候选精确定义。9章新增决策44、45。 |
 | v2.8 | 2026-10-06 | 档案瘦身：单次可输出（消除超长截断问题）。第六章信号清单改表格；第九章45条决策保留完整一行一条；第十二章v1.0-v2.6合并为摘要；第1-5章准则完整保留；第7章当前阶段完整保留；第10-11章完整保留。内部消除嵌套三反引号（文件树用纯文本）。保证新窗口无缝接手。 |
 | v2.9 | 2026-10-06 | 批次2王牌柱代码完成：将军柱（6测试）、元帅柱（6测试）实现完成，累计78 passed / 0 failed。实现过程中修正位置判定口径（将军柱/元帅柱使用基柱日而非确认日T+3日，对齐规格卡第7节）。6.5更新为v2.9；7.1阶段任务更新；7.3 A/B项更新；9章新增决策46（批次2三个规格歧义处理决定：①元帅柱"先者优先"记入待办；②position用T日；③nature按规格卡执行） |
+| v3.0 | 2026-10-06 | 边界覆盖矩阵自查 + 前复权处理链调查 + P0/P1修正：①边界覆盖矩阵（10模块70条边界，实现率85.7%、测试覆盖率44.3%）；②前复权处理链调查发现 data_loader.py 虚假标题、项目无统一数据加载入口、规格层无独立数据契约文件；③P0修正：data_loader.py 标题修正 + 基础声明新增，base.py 输入约束声明新增；④P1新建：spec_data_contract.md（数据契约层，第13份规格文件），修正5.3节冲突处理逻辑矛盾。6.2新增第13份规格文件；6.3规格分层结构更新；6.5代码实现成果更新；7.1阶段任务更新；7.3新增 spec_data_contract.md 第5.2节声称引用与实际不一致待办；9章新增决策47（前复权处理链澄清）、48（数据契约层引入） |
 
 ---
 
