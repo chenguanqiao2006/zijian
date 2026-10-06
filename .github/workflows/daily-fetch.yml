@@ -1,0 +1,73 @@
+name: Daily Fetch
+
+# 每个交易日收盘后自动拉取行情数据
+# 北京时间 15:30 = UTC 07:30（周一至周五）
+# 注：GitHub Actions cron 为 UTC 时间；中国节假日休市日也会触发，但拉取不到新数据（自动跳过）
+
+on:
+  schedule:
+    - cron: '30 7 * * 1-5'   # 周一至周五 UTC 07:30（北京时间 15:30）
+  workflow_dispatch:          # 支持手动触发
+    inputs:
+      full:
+        description: '全量重建日线（覆盖式）'
+        required: false
+        default: 'false'
+      hs300:
+        description: '包含沪深300（默认只拉自定义股票池）'
+        required: false
+        default: 'false'
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fetch_quotes
+        run: |
+          cd src
+          ARGS="--no-hs300"
+          if [ "${{ github.event.inputs.full }}" = "true" ]; then
+            ARGS="$ARGS --full"
+          fi
+          if [ "${{ github.event.inputs.hs300 }}" = "true" ]; then
+            ARGS=$(echo "$ARGS" | sed 's/--no-hs300//')
+          fi
+          python -m data.fetch_quotes $ARGS
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 只添加数据文件（日线、状态、股票池、沪深300缓存）
+          # 不添加：1分钟中转数据、日志文件
+          git add data/kline/ 2>/dev/null || true
+          git add data/fetch_status.json 2>/dev/null || true
+          git add data/watchlist.json 2>/dev/null || true
+          git add data/universe/ 2>/dev/null || true
+
+          # 检查是否有变化
+          if git diff --cached --quiet; then
+            echo "无数据变化，跳过提交"
+          else
+            git commit -m "chore(data): 自动拉取行情数据 $(date -u +'%Y-%m-%d')"
+            git push
+            echo "数据已提交并推送"
+          fi

@@ -20,6 +20,8 @@ src/data/fetch_quotes.py — 行情拉取（日线 + 1分钟），四源自动�
     3. 多源降级：主源失败自动切换备用源，任一成功即返回
     4. 统一格式：所有源输出统一为 [时间, 开, 高, 低, 收, 量] 数组
     5. 1分钟为中转数据：record_truth 记账后即删，仓库不膨胀
+    6. 结构化日志：同时输出到控制台和 data/logs/fetch_YYYY-MM-DD.log
+    7. 自定义股票池：data/watchlist.json，支持 python -m data.watchlist 管理
 
 依赖：
     - requests（必需，腾讯/东财源）
@@ -41,6 +43,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # src/
 from data.paths import kline_path, min1_path, universe_path, validate_code, self_check as paths_self_check
 from data import validator as data_validator
 from data import status as data_status
+from data.logger import get_logger
+from data.watchlist import Watchlist
+
+log = get_logger()
 
 CST = timezone(timedelta(hours=8))
 UA = {
@@ -50,7 +56,8 @@ UA = {
 TIMEOUT = 15
 MAX_WORKERS = 5
 
-# 自选池（默认9只 + 上证指数基准）
+# 自选池（已迁移到 Watchlist，保留此常量仅作默认初始化参考）
+# 实际股票池请使用: python -m data.watchlist list/add/remove
 HOLDINGS = [
     'sh600584',   # 长电科技
     'sz002156',   # 通富微电
@@ -257,7 +264,7 @@ def fetch_daily(code, datalen=120):
             if bars:
                 return name, bars
         except Exception as e:
-            print(f'    [{name}] {code} 日线失败: {type(e).__name__}: {e}')
+            log.warn(f'[{name}] {code} 日线失败: {type(e).__name__}: {e}')
     return None, None
 
 
@@ -269,7 +276,7 @@ def fetch_min1(code):
             if bars:
                 return name, bars
         except Exception as e:
-            print(f'    [{name}] {code} 1分钟失败: {type(e).__name__}: {e}')
+            log.warn(f'[{name}] {code} 1分钟失败: {type(e).__name__}: {e}')
     return None, None
 
 
@@ -330,16 +337,21 @@ def load_hushen300():
         out = [c for c in out if not is_bj(c)]
         if out:
             save_json(cache, out)
-            print(f'[INFO] 沪深300 成分股已缓存: {len(out)} 只')
+            log.info(f'沪深300 成分股已缓存: {len(out)} 只')
         return out
     except Exception as e:
-        print(f'[WARN] 沪深300 拉取失败（1分钟范围将只用自选）: {e}')
+        log.warn(f'沪深300 拉取失败（1分钟范围将只用自选）: {e}')
         return []
 
 
 def get_1min_universe():
-    """1分钟股票池：自选 + 沪深300（北交所已剔除）。"""
-    codes = [c for c in HOLDINGS if not is_bj(c)]
+    """1分钟股票池：自定义股票池 + 沪深300（北交所已剔除）。
+
+    自定义股票池来源：data/watchlist.json（含 holdings/watch/benchmark 三组）
+    管理命令：python -m data.watchlist list/add/remove
+    """
+    wl = Watchlist()
+    codes = [c for c in wl.get_codes() if not is_bj(c)]
     for c in load_hushen300():
         if c not in codes:
             codes.append(c)
@@ -380,7 +392,7 @@ def _validate_and_record(code, data_type, source, bars):
         return is_valid, issues, stats
     except Exception as e:
         # 校验失败不影响数据保存，只记录
-        print(f'    [WARN] {code} {data_type} 校验异常: {type(e).__name__}: {e}')
+        log.warn(f'{code} {data_type} 校验异常: {type(e).__name__}: {e}')
         return True, [], {"bar_count": len(bars)}
 
 
@@ -432,7 +444,7 @@ def run_threaded(codes, worker):
             try:
                 r, src = fut.result()
             except Exception as e:
-                print(f'    {code} 异常: {type(e).__name__}: {e}')
+                log.error(f'{code} 异常: {type(e).__name__}: {e}')
                 r, src = False, None
             if r:
                 ok += 1
@@ -452,50 +464,63 @@ def main():
     ap.add_argument('--days', type=int, default=120, help='日线拉取根数（默认120）')
     ap.add_argument('--codes', nargs='*', help='只拉指定股票代码（如 sh600519 sz000688）')
     ap.add_argument('--self-check', action='store_true', help='仅运行路径宪法自检')
+    ap.add_argument('--watchlist', action='store_true', help='仅打印自定义股票池')
+    ap.add_argument('--no-hs300', action='store_true', help='不拉沪深300，只拉自定义股票池')
     args = ap.parse_args()
 
     # 路径宪法自检（前置校验）
     if not paths_self_check():
-        print('[ERROR] 路径宪法自检失败，终止运行')
+        log.error('路径宪法自检失败，终止运行')
         return 1
     if args.self_check:
         return 0
 
+    # 仅打印股票池
+    if args.watchlist:
+        Watchlist().print_list()
+        return 0
+
     now = beijing_now()
     trading = in_trading_hours(now)
-    print(f'[INFO] 北京时间 {now:%Y-%m-%d %H:%M}  交易时段={trading}')
+    log.info(f'北京时间 {now:%Y-%m-%d %H:%M}  交易时段={trading}')
+    log.info(f'日志文件: {log.log_file}')
 
     # 确定股票池
     if args.codes:
         codes = [validate_code(c) for c in args.codes if not is_bj(c)]
+        log.info(f'指定股票池: {len(codes)} 只')
+    elif args.no_hs300:
+        wl = Watchlist()
+        codes = [c for c in wl.get_codes() if not is_bj(c)]
+        log.info(f'自定义股票池（不含沪深300）: {len(codes)} 只')
     else:
         codes = get_1min_universe()
-    print(f'[INFO] 股票池: {len(codes)} 只')
+        log.info(f'股票池: {len(codes)} 只（自定义+沪深300）')
 
     # --- 日线 ---
     if trading and now.weekday() < 5:
-        print('[INFO] 当前处于 A 股交易时段，跳过日线拉取（避免盘中数据不完整）')
+        log.info('当前处于 A 股交易时段，跳过日线拉取（避免盘中数据不完整）')
     else:
-        print(f'[INFO] 日线模式: {"全量重建" if args.full else "增量合并"}（{args.days} 根）')
+        log.info(f'日线模式: {"全量重建" if args.full else "增量合并"}（{args.days} 根）')
         ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
-        print(f'[INFO] 日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
-        print(f'[INFO] 日线源分布: {sources}')
+        log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
+        log.info(f'日线源分布: {sources}')
         if failed:
-            print(f'[INFO] 日线失败清单(前20): {", ".join(failed[:20])}')
+            log.warn(f'日线失败清单(前20): {", ".join(failed[:20])}')
 
     # --- 1分钟 ---
-    print('[INFO] 1分钟模式: 新浪(多日) → 腾讯(当日) → 东财(多日) 降级')
+    log.info('1分钟模式: 新浪(多日) → 腾讯(当日) → 东财(多日) 降级')
     ok, failed, sources = run_threaded(codes, min1_worker)
-    print(f'[INFO] 1分钟完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
-    print(f'[INFO] 1分钟源分布: {sources}')
+    log.info(f'1分钟完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
+    log.info(f'1分钟源分布: {sources}')
     if failed:
-        print(f'[INFO] 1分钟失败清单(前20): {", ".join(failed[:20])}')
+        log.warn(f'1分钟失败清单(前20): {", ".join(failed[:20])}')
 
-    # --- 拉取状态汇总 ---
+    # --- 拉取状态汇总（人类可读，保留 print） ---
     print()
     data_status.print_summary()
 
-    print('[INFO] fetch_quotes.py 全部结束')
+    log.info('fetch_quotes.py 全部结束')
     return 0
 
 

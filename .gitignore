@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 项目数据目录
+data/kline_1min/     # 1分钟中转数据（记账后即删，不提交）
+data/logs/            # 运行日志（不提交）
+data/*.tmp            # 临时文件
