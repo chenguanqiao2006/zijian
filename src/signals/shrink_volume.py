@@ -41,7 +41,8 @@ class ShrinkVolumeSignal(BaseSignal):
                 idx = len(volume) - 1
         else:
             idx = len(volume) - 1
-current_date = dates[idx] if (dates and idx < len(dates)) else None
+
+        current_date = dates[idx] if (dates and idx < len(dates)) else None
 
         # 边界1：新股上市首日不判定
         if DataLoader.is_new_stock_first_day(data, idx):
@@ -63,7 +64,7 @@ current_date = dates[idx] if (dates and idx < len(dates)) else None
                 shrink_ratio_t=None, shrink_ratio_t1=None, consecutive_count=0,
                 extreme_shrink=False, needs_human_review=False,
                 data_quality="insufficient_data",
-position_result=self._compute_position(data, date),
+                position_result=self._compute_position(data, date),
                 note="上市不足3个有效交易日，不判定缩量柱",
             )
 
@@ -86,7 +87,7 @@ position_result=self._compute_position(data, date),
             )
 
         # 边界4：停牌日
-if (DataLoader.is_suspended(current_vol) or
+        if (DataLoader.is_suspended(current_vol) or
                 DataLoader.is_suspended(prev_vol) or
                 DataLoader.is_suspended(prev2_vol)):
             return self._build_result(
@@ -107,7 +108,8 @@ if (DataLoader.is_suspended(current_vol) or
         shrink_t = current_vol < prev_vol
         shrink_t1 = prev_vol < prev2_vol
         is_signal = shrink_t and shrink_t1
-# 计算连续缩量天数
+
+        # 计算连续缩量天数
         consecutive_count = self._count_consecutive(volume, idx)
 
         # 极端缩量检测
@@ -131,7 +133,7 @@ if (DataLoader.is_suspended(current_vol) or
             shrink_ratio_t=shrink_ratio_t, shrink_ratio_t1=shrink_ratio_t1,
             consecutive_count=consecutive_count,
             extreme_shrink=extreme_shrink, needs_human_review=needs_human_review,
-data_quality="valid",
+            data_quality="valid",
             position_result=position_result,
             note="；".join(note_parts) if note_parts else None,
         )
@@ -161,7 +163,7 @@ data_quality="valid",
         elif position == "high":
             return "高位缩量/出货后信号（整理者分析，非权威来源）"
         elif position == "mid":
-return "中性/整理性质（原著未明确定义，为整理者分析，非权威来源）"
+            return "中性/整理性质（原著未明确定义，为整理者分析，非权威来源）"
         return "无法判定性质"
 
     def _build_result(

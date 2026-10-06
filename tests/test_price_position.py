@@ -1,1 +1,95 @@
-"""位置判定模块测试 - 覆盖规格文件4个测试用例 规格来源：spec_global_rules.md 第8节 测试用例 测试用例1：低位判定（position_pct=10% < 30） 测试用例2：中位判定（position_pct=52% ∈ [30,70]） 测试用例3：高位判定（position_pct=85% > 70） 测试用例4：区间为零边界（HHV==LLV，position=mid，data_quality=degenerate_interval） """ import pytest from src.global_rules.price_position import PricePosition def _make_data(close_val: float, hhv: float, llv: float, days: int = 250) -> dict: """构造Mock数据：近days日高低点区间，当日收盘价为close_val""" high = [hhv] * days low = [llv] * days close = [close_val] * days return {"high": high, "low": low, "close": close, "volume": [1000] * days} class TestPricePosition: """位置判定测试类""" def setup_method(self): self.engine = PricePosition() def test_case1_low_position(self): """测试用例1：低位判定 C[t]=11.00, HHV=20.00, LLV=10.00 position_pct = (11-10)/(20-10)*100 = 10% < 30 → low """ data = _make_data(close_val=11.00, hhv=20.00, llv=10.00) result = self.engine.compute(data)assert result["position"] == "low" assert result["position_pct"] == pytest.approx(10.0, abs=0.01) assert result["hhv_250"] == 20.00 assert result["llv_250"] == 10.00 assert result["data_quality"] == "valid" def test_case2_mid_position(self): """测试用例2：中位判定 C[t]=15.20, HHV=20.00, LLV=10.00 position_pct = (15.20-10)/(20-10)*100 = 52% ∈ [30,70] → mid """ data = _make_data(close_val=15.20, hhv=20.00, llv=10.00) result = self.engine.compute(data) assert result["position"] == "mid" assert result["position_pct"] == pytest.approx(52.0, abs=0.01) assert result["data_quality"] == "valid" def test_case3_high_position(self): """测试用例3：高位判定 C[t]=18.50, HHV=20.00, LLV=10.00 position_pct = (18.50-10)/(20-10)*100 = 85% > 70 → high """ data = _make_data(close_val=18.50, hhv=20.00, llv=10.00) result = self.engine.compute(data) assert result["position"] == "high"assert result["position_pct"] == pytest.approx(85.0, abs=0.01) assert result["data_quality"] == "valid" def test_case4_degenerate_interval(self): """测试用例4：区间为零边界 C[t]=15.00, HHV=15.00, LLV=15.00 HHV==LLV，分母为0 → position=mid, data_quality=degenerate_interval """ data = _make_data(close_val=15.00, hhv=15.00, llv=15.00) result = self.engine.compute(data) assert result["position"] == "mid" assert result["position_pct"] is None assert result["data_quality"] == "degenerate_interval" assert "区间为零" in result["note"] def test_case5_insufficient_data(self): """附加测试：上市不足20日不判定""" data = _make_data(close_val=12.00, hhv=20.00, llv=10.00, days=10) result = self.engine.compute(data) assert result["position"] == "unknown" assert result["data_quality"] == "insufficient_data" def test_case6_window_shrunk(self): """附加测试：上市不足250日但≥20日，标注窗口收缩""" data = _make_data(close_val=12.00, hhv=20.00, llv=10.00, days=100) result = self.engine.compute(data) assert result["position"] == "low" assert result["window_days"] == 100 assert "窗口收缩" in result["note"]
+"""位置判定模块测试 - 覆盖规格文件4个测试用例
+
+规格来源：spec_global_rules.md 第8节 测试用例
+测试用例1：低位判定（position_pct=10% < 30）
+测试用例2：中位判定（position_pct=52% ∈ [30,70]）
+测试用例3：高位判定（position_pct=85% > 70）
+测试用例4：区间为零边界（HHV==LLV，position=mid，data_quality=degenerate_interval）
+"""
+
+import pytest
+
+from src.global_rules.price_position import PricePosition
+
+
+def _make_data(close_val: float, hhv: float, llv: float, days: int = 250) -> dict:
+    """构造Mock数据：近days日高低点区间，当日收盘价为close_val"""
+    high = [hhv] * days
+    low = [llv] * days
+    close = [close_val] * days
+    return {"high": high, "low": low, "close": close, "volume": [1000] * days}
+
+
+class TestPricePosition:
+    """位置判定测试类"""
+
+    def setup_method(self):
+        self.engine = PricePosition()
+
+    def test_case1_low_position(self):
+        """测试用例1：低位判定
+        C[t]=11.00, HHV=20.00, LLV=10.00
+        position_pct = (11-10)/(20-10)*100 = 10% < 30 → low
+        """
+        data = _make_data(close_val=11.00, hhv=20.00, llv=10.00)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "low"
+        assert result["position_pct"] == pytest.approx(10.0, abs=0.01)
+        assert result["hhv_250"] == 20.00
+        assert result["llv_250"] == 10.00
+        assert result["data_quality"] == "valid"
+
+    def test_case2_mid_position(self):
+        """测试用例2：中位判定
+        C[t]=15.20, HHV=20.00, LLV=10.00
+        position_pct = (15.20-10)/(20-10)*100 = 52% ∈ [30,70] → mid
+        """
+        data = _make_data(close_val=15.20, hhv=20.00, llv=10.00)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "mid"
+        assert result["position_pct"] == pytest.approx(52.0, abs=0.01)
+        assert result["data_quality"] == "valid"
+
+    def test_case3_high_position(self):
+        """测试用例3：高位判定
+        C[t]=18.50, HHV=20.00, LLV=10.00
+        position_pct = (18.50-10)/(20-10)*100 = 85% > 70 → high
+        """
+        data = _make_data(close_val=18.50, hhv=20.00, llv=10.00)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "high"
+        assert result["position_pct"] == pytest.approx(85.0, abs=0.01)
+        assert result["data_quality"] == "valid"
+
+    def test_case4_degenerate_interval(self):
+        """测试用例4：区间为零边界
+        C[t]=15.00, HHV=15.00, LLV=15.00
+        HHV==LLV，分母为0 → position=mid, data_quality=degenerate_interval
+        """
+        data = _make_data(close_val=15.00, hhv=15.00, llv=15.00)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "mid"
+        assert result["position_pct"] is None
+        assert result["data_quality"] == "degenerate_interval"
+        assert "区间为零" in result["note"]
+
+    def test_case5_insufficient_data(self):
+        """附加测试：上市不足20日不判定"""
+        data = _make_data(close_val=12.00, hhv=20.00, llv=10.00, days=10)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "unknown"
+        assert result["data_quality"] == "insufficient_data"
+
+    def test_case6_window_shrunk(self):
+        """附加测试：上市不足250日但≥20日，标注窗口收缩"""
+        data = _make_data(close_val=12.00, hhv=20.00, llv=10.00, days=100)
+        result = self.engine.compute(data)
+
+        assert result["position"] == "low"
+        assert result["window_days"] == 100
+        assert "窗口收缩" in result["note"]

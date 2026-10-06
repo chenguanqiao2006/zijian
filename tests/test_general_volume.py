@@ -1,1 +1,340 @@
-"""将军柱信号测试 - 批次2规格卡1 测试用例对齐 spec_batch2_ace_pillar.md 规格卡1 第8节 边界测试对齐 spec_batch2_ace_pillar.md 规格卡1 第5节 """ import pytest from src.signals.general_volume import GeneralVolumeSignal @pytest.fixture def signal(): return GeneralVolumeSignal() def _build_data(history_volumes, history_closes, history_opens, base_v, base_c, base_o, base_h, base_l, day1_v, day1_c, day2_v, day2_c, day3_v, day3_c, hhv_250=20.00, llv_250=10.00): """构造将军柱测试数据 历史数据中第5天（索引4）为阴线，用于阳胜柱判定。 """ volumes = list(history_volumes) closes = list(history_closes) opens = list(history_opens) highs = [c + 0.3 for c in history_closes] lows = [o - 0.2 for o in history_opens] # 确保位置判定窗口内包含 hhv_250 和 llv_250 if highs: highs[0] = hhv_250 if lows: lows[0] = llv_250 # T日（基柱日） volumes.append(base_v) closes.append(base_c) opens.append(base_o) highs.append(base_h) lows.append(base_l)# T+1日 volumes.append(day1_v) closes.append(day1_c) opens.append(day1_c * 0.98) highs.append(day1_c * 1.02) lows.append(day1_c * 0.95) # T+2日 volumes.append(day2_v) closes.append(day2_c) opens.append(day2_c * 0.98) highs.append(day2_c * 1.02) lows.append(day2_c * 0.95) # T+3日（确认日） volumes.append(day3_v) closes.append(day3_c) opens.append(day3_c * 0.98) highs.append(day3_c * 1.02) lows.append(day3_c * 0.95) n = len(volumes) dates = [f"2026-01-{i+1:02d}" for i in range(n)] # 构造250日高低点用于位置判定 for i in range(250 - n): volumes.append(5000) closes.append((hhv_250 + llv_250) / 2) opens.append((hhv_250 + llv_250) / 2 - 0.1) highs.append(hhv_250) lows.append(llv_250) dates.append(f"2026-02-{i+1:02d}") return { "volume": volumes, "close": closes, "open": opens, "high": highs, "low": lows, "dates": dates, } def _make_standard_history():"""构造标准历史数据：20天，第5天为阴线（用于阳胜柱判定）""" hist_v = [8000, 8100, 8200, 8300, 6000, 8500, 8600, 8700, 8800, 8900, 9000, 9100, 9200, 9300, 9400, 9500, 9600, 9700, 9800, 5700] hist_c = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 14.40, 14.45, 14.50, 14.55, 14.60, 14.65, 14.70, 14.75, 14.80, 14.85, 14.90, 14.50] hist_o = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.30, 14.35, 14.40, 14.45, 14.50, 14.55, 14.60, 14.65, 14.70, 14.75, 14.80, 14.20] return hist_v, hist_c, hist_o class TestGeneralVolumeStandard: """标准将军柱判定""" def test_case1_standard_hit(self, signal): """测试用例1：标准将军柱命中""" hist_v, hist_c, hist_o = _make_standard_history() # 基柱：V=12000万（倍量柱，12000/5700=2.1），C=15.20, O=14.50 # 左侧最近阴柱：C=13.80, V=6000（阳胜柱：15.20>13.80 且 12000>6000） # 后三日：C=15.00,14.90,15.10（min=14.90>=14.50不破实底；avg=15.00<15.20低于实顶） # 后三日量：9000,7500,6000（均<=12000，量不过顶） data = _build_data(hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, hhv_250=16.00, llv_250=14.00, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is True assert result["base_pillar_type"] == "double_volume" assert result["defense_line_price"] == 14.50 assert result["values"]["hold_real_bottom"] is True assert result["values"]["volume_not_exceed"] is True assert result["values"]["below_real_top"] is True assert result["position"] == "mid" def test_case2_yang_sheng_not_satisfied(self, signal): """测试用例2：阳胜柱条件不满足（C[t]与C[left_ying]相等），不命中""" hist_v, hist_c, hist_o = _make_standard_history() # 修改阴线：C=15.20（与C[t]相等），O=15.30（保持C<O为阴线），V=10000 hist_c[4] = 15.20 hist_o[4] = 15.30hist_v[4] = 10000 data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["values"]["yang_win"] is False assert "价柱未胜" in (result.get("note") or "") def test_case3_break_real_bottom(self, signal): """测试用例3：后三日跌破实底，不命中""" hist_v, hist_c, hist_o = _make_standard_history() # T+2日 C=14.30（跌破实底14.50） data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=14.80, day2_v=7500, day2_c=14.30, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24")assert result["is_signal"] is False assert result["values"]["hold_real_bottom"] is False assert "跌破基柱实底" in (result.get("note") or "") def test_case4_avg_above_real_top_is_golden(self, signal): """测试用例4：后三日收盘价均值高于实顶，判定为黄金柱而非将军柱""" hist_v, hist_c, hist_o = _make_standard_history() # 后三日 C=15.35,15.50,15.80（avg=15.55>15.20，高于实顶） data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.35, day2_v=7500, day2_c=15.50, day3_v=6000, day3_c=15.80, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["values"]["below_real_top"] is False assert "黄金柱" in (result.get("note") or "") class TestGeneralVolumeBoundary: """边界情况 - 对齐 spec_batch2_ace_pillar.md 规格卡1 第5节""" def test_position_and_nature_fields(self, signal):"""输出包含position和nature字段""" hist_v, hist_c, hist_o = _make_standard_history() data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert "position" in result assert "nature" in result assert "defense_line_price" in result def test_json_keys_snake_case(self, signal): """所有JSON key为英文snake_case""" import re hist_v, hist_c, hist_o = _make_standard_history() data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24")def check_keys(obj, path=""): if isinstance(obj, dict): for k in obj: assert re.match(r'^[a-z][a-z0-9_]*$', k), f"Non-snake_case key: {path}.{k}" check_keys(obj[k], f"{path}.{k}") check_keys(result) def test_boundary_base_prev_day_suspended(self, signal): """边界1：基柱日V[t-1]==0（停牌后首日），基柱候选失效（倍量柱被拦截）""" hist_v, hist_c, hist_o = _make_standard_history() # 将基柱日前一日（历史数据最后一天，索引19）设为停牌（V=0） # 倍量柱判定时V[t-1]==0会被拦截，基柱候选失效 hist_v[-1] = 0 data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["base_pillar_type"] is None assert "基柱不属于四种候选形态" in (result.get("note") or "")def test_boundary_suspended_in_validation(self, signal): """边界2：后三日中存在停牌日（V=0），将军柱判定失效""" hist_v, hist_c, hist_o = _make_standard_history() # T+2日 V=0（停牌） data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=0, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["data_quality"] == "suspended_in_validation" assert "停牌日" in (result.get("note") or "") def test_boundary_new_stock(self, signal): """边界3：新股上市（历史数据不足10日，base_idx<9），不判定""" # 构造12日数据：历史8日 + 基柱日 + 后三日 = 12日，base_idx=8<9 volumes = [5000, 5100, 5200, 5300, 4000, 5500, 5600, 5700, 12000, 9000, 7500, 6000] closes = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 15.20, 15.00, 14.90, 15.10]opens = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.50, 14.70, 14.60, 14.80] highs = [c + 0.3 for c in closes] lows = [o - 0.2 for o in opens] dates = [f"2026-01-{i+1:02d}" for i in range(12)] data = {"volume": volumes, "close": closes, "open": opens, "high": highs, "low": lows, "dates": dates} result = signal.detect(data, date="2026-01-12") assert result["is_signal"] is False assert result["data_quality"] == "new_stock" assert "新股上市" in (result.get("note") or "") def test_boundary_invalid_volume(self, signal): """边界4：数据异常（基柱日V为负数），判定失效""" hist_v, hist_c, hist_o = _make_standard_history() data = _build_data( hist_v, hist_c, hist_o, base_v=-100, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=7500, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24")assert result["is_signal"] is False assert result["data_quality"] == "invalid_volume" assert "数据异常" in (result.get("note") or "") def test_boundary_volume_exceed_base(self, signal): """边界5：后三日量柱超过基柱，不判定""" hist_v, hist_c, hist_o = _make_standard_history() # T+2日 V=13000 > 基柱V=12000 data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=13000, day2_c=14.90, day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["values"]["volume_not_exceed"] is False assert "量超过基柱" in (result.get("note") or "") def test_boundary_base_not_candidate(self, signal): """边界6：基柱不属于四种候选形态（倍量/高量/梯量第一柱/平量第二柱），不判定""" hist_v, hist_c, hist_o = _make_standard_history() # 修改历史数据最后一天为9900（使V[t-1]=9900 > V[t-2]=9800，前一日也递增，梯量第一柱不成立）# 基柱日 V=6100（6100/9900=0.62，不满足倍量；不是10日最高量；不是梯量第一柱；不是平量第二柱） hist_v[-1] = 9900 data = _build_data( hist_v, hist_c, hist_o, base_v=6100, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=5000, day1_c=15.00, day2_v=4500, day2_c=14.90, day3_v=4000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is False assert result["base_pillar_type"] is None assert "基柱不属于四种候选形态" in (result.get("note") or "") def test_boundary_extreme_shrink(self, signal): """边界7：后三日中存在极端缩量（V < V[t] × 0.1），标注需人工复核""" hist_v, hist_c, hist_o = _make_standard_history() # T+2日 V=500 < 12000×0.1=1200（极端缩量），其他条件满足 data = _build_data( hist_v, hist_c, hist_o, base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40, day1_v=9000, day1_c=15.00, day2_v=500, day2_c=14.90,day3_v=6000, day3_c=15.10, ) result = signal.detect(data, date="2026-01-24") assert result["is_signal"] is True assert result.get("extreme_shrink") is True assert result.get("needs_human_review") is True assert "极端缩量" in (result.get("note") or "") def test_boundary_position_unknown(self, signal): """边界8：位置判定失败（数据不足20日），position='unknown'，nature='无法判定性质'""" # 构造13日数据：历史9日 + 基柱日 + 后三日 = 13日 # base_idx=9>=9（将军柱可判定），但位置判定需20日有效数据，不足20日返回unknown volumes = [5000, 5100, 5200, 5300, 4000, 5500, 5600, 5700, 5800, 12000, 9000, 7500, 6000] closes = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 14.40, 15.20, 15.00, 14.90, 15.10] opens = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.30, 14.50, 14.70, 14.60, 14.80] highs = [c + 0.3 for c in closes] lows = [o - 0.2 for o in opens] dates = [f"2026-01-{i+1:02d}" for i in range(13)] data = {"volume": volumes, "close": closes, "open": opens, "high": highs, "low": lows, "dates": dates} result = signal.detect(data, date="2026-01-13") assert result["position"] == "unknown" assert result["nature"] == "无法判定性质"
+"""将军柱信号测试 - 批次2规格卡1
+
+测试用例对齐 spec_batch2_ace_pillar.md 规格卡1 第8节
+边界测试对齐 spec_batch2_ace_pillar.md 规格卡1 第5节
+"""
+
+import pytest
+from src.signals.general_volume import GeneralVolumeSignal
+
+
+@pytest.fixture
+def signal():
+    return GeneralVolumeSignal()
+
+
+def _build_data(history_volumes, history_closes, history_opens,
+                base_v, base_c, base_o, base_h, base_l,
+                day1_v, day1_c,
+                day2_v, day2_c,
+                day3_v, day3_c,
+                hhv_250=20.00, llv_250=10.00):
+    """构造将军柱测试数据
+
+    历史数据中第5天（索引4）为阴线，用于阳胜柱判定。
+    """
+    volumes = list(history_volumes)
+    closes = list(history_closes)
+    opens = list(history_opens)
+    highs = [c + 0.3 for c in history_closes]
+    lows = [o - 0.2 for o in history_opens]
+    # 确保位置判定窗口内包含 hhv_250 和 llv_250
+    if highs:
+        highs[0] = hhv_250
+    if lows:
+        lows[0] = llv_250
+
+    # T日（基柱日）
+    volumes.append(base_v)
+    closes.append(base_c)
+    opens.append(base_o)
+    highs.append(base_h)
+    lows.append(base_l)
+
+    # T+1日
+    volumes.append(day1_v)
+    closes.append(day1_c)
+    opens.append(day1_c * 0.98)
+    highs.append(day1_c * 1.02)
+    lows.append(day1_c * 0.95)
+
+    # T+2日
+    volumes.append(day2_v)
+    closes.append(day2_c)
+    opens.append(day2_c * 0.98)
+    highs.append(day2_c * 1.02)
+    lows.append(day2_c * 0.95)
+
+    # T+3日（确认日）
+    volumes.append(day3_v)
+    closes.append(day3_c)
+    opens.append(day3_c * 0.98)
+    highs.append(day3_c * 1.02)
+    lows.append(day3_c * 0.95)
+
+    n = len(volumes)
+    dates = [f"2026-01-{i+1:02d}" for i in range(n)]
+
+    # 构造250日高低点用于位置判定
+    for i in range(250 - n):
+        volumes.append(5000)
+        closes.append((hhv_250 + llv_250) / 2)
+        opens.append((hhv_250 + llv_250) / 2 - 0.1)
+        highs.append(hhv_250)
+        lows.append(llv_250)
+        dates.append(f"2026-02-{i+1:02d}")
+
+    return {
+        "volume": volumes, "close": closes, "open": opens,
+        "high": highs, "low": lows, "dates": dates,
+    }
+
+
+def _make_standard_history():
+    """构造标准历史数据：20天，第5天为阴线（用于阳胜柱判定）"""
+    hist_v = [8000, 8100, 8200, 8300, 6000, 8500, 8600, 8700, 8800, 8900,
+              9000, 9100, 9200, 9300, 9400, 9500, 9600, 9700, 9800, 5700]
+    hist_c = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 14.40, 14.45,
+              14.50, 14.55, 14.60, 14.65, 14.70, 14.75, 14.80, 14.85, 14.90, 14.50]
+    hist_o = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.30, 14.35,
+              14.40, 14.45, 14.50, 14.55, 14.60, 14.65, 14.70, 14.75, 14.80, 14.20]
+    return hist_v, hist_c, hist_o
+
+
+class TestGeneralVolumeStandard:
+    """标准将军柱判定"""
+
+    def test_case1_standard_hit(self, signal):
+        """测试用例1：标准将军柱命中"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # 基柱：V=12000万（倍量柱，12000/5700=2.1），C=15.20, O=14.50
+        # 左侧最近阴柱：C=13.80, V=6000（阳胜柱：15.20>13.80 且 12000>6000）
+        # 后三日：C=15.00,14.90,15.10（min=14.90>=14.50不破实底；avg=15.00<15.20低于实顶）
+        # 后三日量：9000,7500,6000（均<=12000，量不过顶）
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+            hhv_250=16.00, llv_250=14.00,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is True
+        assert result["base_pillar_type"] == "double_volume"
+        assert result["defense_line_price"] == 14.50
+        assert result["values"]["hold_real_bottom"] is True
+        assert result["values"]["volume_not_exceed"] is True
+        assert result["values"]["below_real_top"] is True
+        assert result["position"] == "mid"
+
+    def test_case2_yang_sheng_not_satisfied(self, signal):
+        """测试用例2：阳胜柱条件不满足（C[t]与C[left_ying]相等），不命中"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # 修改阴线：C=15.20（与C[t]相等），O=15.30（保持C<O为阴线），V=10000
+        hist_c[4] = 15.20
+        hist_o[4] = 15.30
+        hist_v[4] = 10000
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["values"]["yang_win"] is False
+        assert "价柱未胜" in (result.get("note") or "")
+
+    def test_case3_break_real_bottom(self, signal):
+        """测试用例3：后三日跌破实底，不命中"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # T+2日 C=14.30（跌破实底14.50）
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=14.80,
+            day2_v=7500, day2_c=14.30,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["values"]["hold_real_bottom"] is False
+        assert "跌破基柱实底" in (result.get("note") or "")
+
+    def test_case4_avg_above_real_top_is_golden(self, signal):
+        """测试用例4：后三日收盘价均值高于实顶，判定为黄金柱而非将军柱"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # 后三日 C=15.35,15.50,15.80（avg=15.55>15.20，高于实顶）
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.35,
+            day2_v=7500, day2_c=15.50,
+            day3_v=6000, day3_c=15.80,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["values"]["below_real_top"] is False
+        assert "黄金柱" in (result.get("note") or "")
+
+
+class TestGeneralVolumeBoundary:
+    """边界情况 - 对齐 spec_batch2_ace_pillar.md 规格卡1 第5节"""
+
+    def test_position_and_nature_fields(self, signal):
+        """输出包含position和nature字段"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert "position" in result
+        assert "nature" in result
+        assert "defense_line_price" in result
+
+    def test_json_keys_snake_case(self, signal):
+        """所有JSON key为英文snake_case"""
+        import re
+        hist_v, hist_c, hist_o = _make_standard_history()
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+
+        def check_keys(obj, path=""):
+            if isinstance(obj, dict):
+                for k in obj:
+                    assert re.match(r'^[a-z][a-z0-9_]*$', k), f"Non-snake_case key: {path}.{k}"
+                    check_keys(obj[k], f"{path}.{k}")
+
+        check_keys(result)
+
+    def test_boundary_base_prev_day_suspended(self, signal):
+        """边界1：基柱日V[t-1]==0（停牌后首日），基柱候选失效（倍量柱被拦截）"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # 将基柱日前一日（历史数据最后一天，索引19）设为停牌（V=0）
+        # 倍量柱判定时V[t-1]==0会被拦截，基柱候选失效
+        hist_v[-1] = 0
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["base_pillar_type"] is None
+        assert "基柱不属于四种候选形态" in (result.get("note") or "")
+
+    def test_boundary_suspended_in_validation(self, signal):
+        """边界2：后三日中存在停牌日（V=0），将军柱判定失效"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # T+2日 V=0（停牌）
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=0, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["data_quality"] == "suspended_in_validation"
+        assert "停牌日" in (result.get("note") or "")
+
+    def test_boundary_new_stock(self, signal):
+        """边界3：新股上市（历史数据不足10日，base_idx<9），不判定"""
+        # 构造12日数据：历史8日 + 基柱日 + 后三日 = 12日，base_idx=8<9
+        volumes = [5000, 5100, 5200, 5300, 4000, 5500, 5600, 5700, 12000, 9000, 7500, 6000]
+        closes = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 15.20, 15.00, 14.90, 15.10]
+        opens = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.50, 14.70, 14.60, 14.80]
+        highs = [c + 0.3 for c in closes]
+        lows = [o - 0.2 for o in opens]
+        dates = [f"2026-01-{i+1:02d}" for i in range(12)]
+        data = {"volume": volumes, "close": closes, "open": opens, "high": highs, "low": lows, "dates": dates}
+        result = signal.detect(data, date="2026-01-12")
+        assert result["is_signal"] is False
+        assert result["data_quality"] == "new_stock"
+        assert "新股上市" in (result.get("note") or "")
+
+    def test_boundary_invalid_volume(self, signal):
+        """边界4：数据异常（基柱日V为负数），判定失效"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=-100, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=7500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["data_quality"] == "invalid_volume"
+        assert "数据异常" in (result.get("note") or "")
+
+    def test_boundary_volume_exceed_base(self, signal):
+        """边界5：后三日量柱超过基柱，不判定"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # T+2日 V=13000 > 基柱V=12000
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=13000, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["values"]["volume_not_exceed"] is False
+        assert "量超过基柱" in (result.get("note") or "")
+
+    def test_boundary_base_not_candidate(self, signal):
+        """边界6：基柱不属于四种候选形态（倍量/高量/梯量第一柱/平量第二柱），不判定"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # 修改历史数据最后一天为9900（使V[t-1]=9900 > V[t-2]=9800，前一日也递增，梯量第一柱不成立）
+        # 基柱日 V=6100（6100/9900=0.62，不满足倍量；不是10日最高量；不是梯量第一柱；不是平量第二柱）
+        hist_v[-1] = 9900
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=6100, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=5000, day1_c=15.00,
+            day2_v=4500, day2_c=14.90,
+            day3_v=4000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is False
+        assert result["base_pillar_type"] is None
+        assert "基柱不属于四种候选形态" in (result.get("note") or "")
+
+    def test_boundary_extreme_shrink(self, signal):
+        """边界7：后三日中存在极端缩量（V < V[t] × 0.1），标注需人工复核"""
+        hist_v, hist_c, hist_o = _make_standard_history()
+        # T+2日 V=500 < 12000×0.1=1200（极端缩量），其他条件满足
+        data = _build_data(
+            hist_v, hist_c, hist_o,
+            base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
+            day1_v=9000, day1_c=15.00,
+            day2_v=500, day2_c=14.90,
+            day3_v=6000, day3_c=15.10,
+        )
+        result = signal.detect(data, date="2026-01-24")
+        assert result["is_signal"] is True
+        assert result.get("extreme_shrink") is True
+        assert result.get("needs_human_review") is True
+        assert "极端缩量" in (result.get("note") or "")
+
+    def test_boundary_position_unknown(self, signal):
+        """边界8：位置判定失败（数据不足20日），position='unknown'，nature='无法判定性质'"""
+        # 构造13日数据：历史9日 + 基柱日 + 后三日 = 13日
+        # base_idx=9>=9（将军柱可判定），但位置判定需20日有效数据，不足20日返回unknown
+        volumes = [5000, 5100, 5200, 5300, 4000, 5500, 5600, 5700, 5800, 12000, 9000, 7500, 6000]
+        closes = [14.00, 14.05, 14.10, 14.15, 13.80, 14.25, 14.30, 14.35, 14.40, 15.20, 15.00, 14.90, 15.10]
+        opens = [13.90, 13.95, 14.00, 14.05, 14.20, 14.15, 14.20, 14.25, 14.30, 14.50, 14.70, 14.60, 14.80]
+        highs = [c + 0.3 for c in closes]
+        lows = [o - 0.2 for o in opens]
+        dates = [f"2026-01-{i+1:02d}" for i in range(13)]
+        data = {"volume": volumes, "close": closes, "open": opens, "high": highs, "low": lows, "dates": dates}
+        result = signal.detect(data, date="2026-01-13")
+        assert result["position"] == "unknown"
+        assert result["nature"] == "无法判定性质"

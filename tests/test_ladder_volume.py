@@ -37,7 +37,7 @@ class TestLadderVolumeStandard:
     def test_only_2_increase_not_hit(self, signal):
         """测试用例2：仅2根递增，不命中"""
         volumes = [5500, 4000, 5000]
-data = _make_data(volumes)
+        data = _make_data(volumes)
         result = signal.detect(data)
         assert result["is_signal"] is False
         assert "仅2根递增" in (result.get("note") or "")
@@ -67,7 +67,7 @@ class TestLadderVolumeBoundary:
         data = _make_data([5000], dates=["2026-01-01"])
         result = signal.detect(data)
         assert result["is_signal"] is False
-assert result["data_quality"] == "new_stock_first_day"
+        assert result["data_quality"] == "new_stock_first_day"
 
     def test_insufficient_data(self, signal):
         """上市不足3日不判定"""

@@ -37,7 +37,7 @@ def _make_golden_data(base_v, base_c, base_o, base_h, base_l,
             # 阴线：收盘价 < 开盘价
             volumes.append(6000)
             closes.append(13.80)
-opens.append(14.20)
+            opens.append(14.20)
             highs.append(14.30)
             lows.append(13.70)
         else:
@@ -68,7 +68,7 @@ opens.append(14.20)
     # T日（基柱日）
     volumes.append(base_v)
     closes.append(base_c)
-opens.append(base_o)
+    opens.append(base_o)
     highs.append(base_h)
     lows.append(base_l)
 
@@ -113,7 +113,7 @@ class TestGoldenVolumeStandard:
         """测试用例1：标准黄金柱命中（最强版，倍量柱基柱）"""
         # 前置日：V=5700万（确保T日倍量），C=14.50
         # T日基柱：V=12000万, C=15.20, O=14.50（倍量柱：12000/5700=2.1）
-data = _make_golden_data(
+        data = _make_golden_data(
             base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
             day1_v=9000, day1_c=15.35, day1_l=15.25,
             day2_v=7500, day2_c=15.50, day2_l=15.30,
@@ -134,7 +134,7 @@ data = _make_golden_data(
         data = _make_golden_data(
             base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
             day1_v=9000, day1_c=15.00, day1_l=15.25,
-day2_v=7500, day2_c=15.10, day2_l=15.30,
+            day2_v=7500, day2_c=15.10, day2_l=15.30,
             day3_v=6000, day3_c=15.20, day3_l=15.45,
             prev_v=5700, prev_c=14.50, prev_o=14.20,
         )
@@ -158,7 +158,7 @@ day2_v=7500, day2_c=15.10, day2_l=15.30,
         assert "后三日某日量超过基柱量" in (result.get("note") or "")
 
     def test_flat_volume_second_as_base(self, signal):
-"""测试用例4：平量柱第二柱作为基柱"""
+        """测试用例4：平量柱第二柱作为基柱"""
         # 需前置数据：V[t-2]=4980, V[t-1]=5050, V[t]=5000（连续2根平量）
         data = _make_golden_data(
             base_v=5000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
@@ -186,7 +186,7 @@ class TestGoldenVolumeBoundary:
         data = _make_golden_data(
             base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
             day1_v=9000, day1_c=15.35, day1_l=15.25,
-day2_v=7500, day2_c=15.50, day2_l=15.30,
+            day2_v=7500, day2_c=15.50, day2_l=15.30,
             day3_v=6000, day3_c=15.80, day3_l=15.45,
             prev_v=5700, prev_c=14.50, prev_o=14.20,
         )
@@ -211,7 +211,7 @@ day2_v=7500, day2_c=15.50, day2_l=15.30,
             day2_v=7500, day2_c=15.50, day2_l=15.30,
             day3_v=6000, day3_c=15.80, day3_l=15.45,
             prev_v=5700, prev_c=14.50, prev_o=14.20,
-)
+        )
         result = signal.detect(data)
         assert result["is_signal"] is False
         assert result["data_quality"] == "suspended_in_validation"
@@ -234,7 +234,7 @@ day2_v=7500, day2_c=15.50, day2_l=15.30,
         """输出包含position和nature字段"""
         data = _make_golden_data(
             base_v=12000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
-day1_v=9000, day1_c=15.35, day1_l=15.25,
+            day1_v=9000, day1_c=15.35, day1_l=15.25,
             day2_v=7500, day2_c=15.50, day2_l=15.30,
             day3_v=6000, day3_c=15.80, day3_l=15.45,
             prev_v=5700, prev_c=14.50, prev_o=14.20,
@@ -268,7 +268,7 @@ class TestGoldenVolumeYangSheng:
                 volumes.append(yin_v)
                 closes.append(yin_c)
                 opens.append(yin_o)
-highs.append(max(yin_c, yin_o) + 0.1)
+                highs.append(max(yin_c, yin_o) + 0.1)
                 lows.append(min(yin_c, yin_o) - 0.1)
             else:
                 volumes.append(8000 + i * 100)
@@ -301,7 +301,7 @@ highs.append(max(yin_c, yin_o) + 0.1)
         # T+2日
         volumes.append(7500)
         closes.append(base_c + 0.30)
-opens.append(base_c + 0.20)
+        opens.append(base_c + 0.20)
         highs.append(base_c + 0.40)
         lows.append(max(base_c, base_o) + 0.10)
 
@@ -330,7 +330,7 @@ opens.append(base_c + 0.20)
             base_v=12000, base_c=13.50, base_o=13.20,
             prev_v=5700, prev_c=13.00, prev_o=12.80,
         )
-result = signal.detect(data)
+        result = signal.detect(data)
         assert result["is_signal"] is False
         assert result["yang_sheng_ok"] is False
         assert "价柱未胜" in (result.get("note") or "")
@@ -354,7 +354,7 @@ result = signal.detect(data)
         """阳胜柱双向胜：标准黄金柱命中（验证严格判定后正向用例仍通过）"""
         # 阴线：V=6000, C=13.80, O=14.20
         # 基柱日：V=12000（> 6000，量胜），C=15.20（> 13.80，价胜）
-data = self._build_data_with_yin(
+        data = self._build_data_with_yin(
             yin_v=6000, yin_c=13.80, yin_o=14.20,
             base_v=12000, base_c=15.20, base_o=14.50,
             prev_v=5700, prev_c=14.50, prev_o=14.20,
@@ -379,7 +379,8 @@ class TestGoldenVolumeBasePillarReuse:
         opens = list(history_opens)
         highs = [c + 0.3 for c in history_closes]
         lows = [o - 0.2 for o in history_opens]
-# T日（基柱日）
+
+        # T日（基柱日）
         volumes.append(base_v)
         closes.append(base_c)
         opens.append(base_o)
@@ -417,7 +418,8 @@ class TestGoldenVolumeBasePillarReuse:
 
     def test_high_volume_criterion_b_as_base(self, signal):
         """标准B满足但标准A不满足的高量柱作为基柱时，黄金柱仍能命中
-验证：高量柱基柱候选复用 HighVolumeSignal.is_high_volume（双标准A OR B），
+
+        验证：高量柱基柱候选复用 HighVolumeSignal.is_high_volume（双标准A OR B），
         不再是简化的 V[t]==HHV(V,10)。标准B命中但标准A不命中时，基柱候选仍应命中。
         """
         # 构造13天历史数据（确保base_idx >= 9，高量柱标准A可用）
@@ -436,7 +438,7 @@ class TestGoldenVolumeBasePillarReuse:
         data = self._build_custom_data(
             hist_v, hist_c, hist_o,
             base_v=8000, base_c=15.20, base_o=14.50, base_h=15.30, base_l=14.40,
-day1_v=7500, day1_c=15.35, day1_l=15.25,
+            day1_v=7500, day1_c=15.35, day1_l=15.25,
             day2_v=7000, day2_c=15.50, day2_l=15.30,
             day3_v=6500, day3_c=15.80, day3_l=15.45,
         )

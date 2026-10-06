@@ -41,7 +41,8 @@ class LadderVolumeSignal(BaseSignal):
                 idx = len(volume) - 1
         else:
             idx = len(volume) - 1
-current_date = dates[idx] if (dates and idx < len(dates)) else None
+
+        current_date = dates[idx] if (dates and idx < len(dates)) else None
 
         # 边界1：新股上市首日不判定
         if DataLoader.is_new_stock_first_day(data, idx):
@@ -63,7 +64,7 @@ current_date = dates[idx] if (dates and idx < len(dates)) else None
                 data_quality="insufficient_data",
                 position_result=self._compute_position(data, date),
                 note="上市不足3个有效交易日，不判定梯量柱",
-)
+            )
 
         current_vol = volume[idx] if idx < len(volume) else None
         prev_vol = volume[idx - 1] if idx - 1 >= 0 else None
@@ -87,7 +88,7 @@ current_date = dates[idx] if (dates and idx < len(dates)) else None
                 DataLoader.is_suspended(prev_vol) or
                 DataLoader.is_suspended(prev2_vol)):
             return self._build_result(
-idx=idx, current_date=current_date, is_signal=False,
+                idx=idx, current_date=current_date, is_signal=False,
                 v_t=current_vol, v_t_1=prev_vol, v_t_2=prev2_vol,
                 increase_ratio_t=None, increase_ratio_t1=None, consecutive_count=0,
                 data_quality="suspended_in_sequence",
@@ -112,7 +113,7 @@ idx=idx, current_date=current_date, is_signal=False,
         note_parts = []
         if increase_t and not increase_t1:
             note_parts.append("仅2根递增（V[t-1]未大于V[t-2]），不判定（原著要求连续3根以上）")
-if consecutive_count >= self.SUPER_LONG_THRESHOLD:
+        if consecutive_count >= self.SUPER_LONG_THRESHOLD:
             note_parts.append(f"超长梯量（连续{consecutive_count}根），原著口诀'梯量盯三防四'提示第4根可能变盘")
 
         return self._build_result(
@@ -135,7 +136,7 @@ if consecutive_count >= self.SUPER_LONG_THRESHOLD:
             if (v_curr is None or v_prev is None or
                     v_curr <= 0 or v_prev <= 0 or
                     DataLoader.is_suspended(v_prev)):
-break
+                break
             if v_curr > v_prev:
                 count += 1
                 i -= 1
@@ -172,7 +173,7 @@ break
 
         # 边界：数据异常
         if (current_vol is None or current_vol < 0 or
-prev_vol is None or prev_vol < 0 or
+                prev_vol is None or prev_vol < 0 or
                 prev2_vol is None or prev2_vol < 0):
             return False
 
@@ -200,7 +201,7 @@ prev_vol is None or prev_vol < 0 or
     def _build_result(
         self, idx: int, current_date: Optional[str], is_signal: bool,
         v_t: Optional[float], v_t_1: Optional[float], v_t_2: Optional[float],
-increase_ratio_t: Optional[float], increase_ratio_t1: Optional[float],
+        increase_ratio_t: Optional[float], increase_ratio_t1: Optional[float],
         consecutive_count: int, data_quality: str,
         position_result: Dict[str, Any], note: Optional[str] = None,
     ) -> Dict[str, Any]:

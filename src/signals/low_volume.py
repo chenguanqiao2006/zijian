@@ -1,1 +1,231 @@
-"""低量柱信号卡 - 规格卡2 规格来源：spec_batch1_basic_volume.md 规格卡2（低量柱） 补充：spec_batch1_addendum.md（追加 position/nature 字段） 原著：《量柱擒涨停》（第4版）第二单元"低量柱——下跌与上涨的撑力计" 零未来函数：低量柱为当日确认信号（T日收盘后），仅使用当日及之前数据。 判定标准： A: V[t] == LLV(V, 10) （近10日最低量） B: V[t] < V[t-1] < V[t-2] < V[t-3] < V[t-4] 且 V[t] == LLV(V, 10) （连续5日萎缩至阶段最小） 总判定：A OR B 位置-性质映射（spec_global_rules.md）： 低位：底部抛压枯竭/变盘前兆信号 中位：中性/换手性质 高位：高位缩量/观望信号 """ from typing import Any, Dict, List, Optional from .base import BaseSignal from ..utils.data_loader import DataLoader class LowVolumeSignal(BaseSignal): """低量柱信号检测引擎""" signal_id = "low_volume" signal_name = "低量柱" LLV_WINDOW = 10 SHRINK_B_DAYS = 5 EXTREME_SHRINK_RATIO = 0.1 def detect(self, data: Dict[str, Any], date: Optional[str] = None) -> Dict[str, Any]: """检测低量柱信号 Args: data: 行情数据，须包含 volume 列表，可选 dates 列表 date: 判定日期，默认为最后一日 Returns: 信号判定结果JSON（字段对齐 spec_batch1_basic_volume.md 第6节 + addendum）""" volume: List[float] = data.get("volume", []) dates: List[str] = data.get("dates", []) # 确定判定索引 if date is not None and dates: try: idx = dates.index(date) except ValueError: idx = len(volume) - 1 else: idx = len(volume) - 1 current_date = dates[idx] if (dates and idx < len(dates)) else None # 边界1：新股上市首日不判定（规格第5节第2条） if DataLoader.is_new_stock_first_day(data, idx): return self._build_result( idx=idx, current_date=current_date, is_signal=False, criterion_a=False, criterion_b=False, match_criteria="none", v_t=None, llv_10=None, shrink_days=0, extreme_shrink=False, needs_human_review=False, data_quality="new_stock_first_day", position_result=self._compute_position(data, date), note="新股上市首日，不判定低量柱（需上市满10个交易日后启用）", )# 边界2：当日成交量数据异常（规格第5节第4条） current_vol = volume[idx] if idx < len(volume) else None if current_vol is None or current_vol < 0: return self._build_result( idx=idx, current_date=current_date, is_signal=False, criterion_a=False, criterion_b=False, match_criteria="none", v_t=None, llv_10=None, shrink_days=0, extreme_shrink=False, needs_human_review=False, data_quality="invalid_volume", position_result=self._compute_position(data, date), note="当日成交量数据异常（负数或空值），不判定低量柱", ) # 边界3：全天停牌（V[t]==0），不判定为低量柱（规格第5节第6条） if current_vol == 0: return self._build_result( idx=idx, current_date=current_date, is_signal=False, criterion_a=False, criterion_b=False, match_criteria="none", v_t=current_vol, llv_10=None, shrink_days=0, extreme_shrink=False, needs_human_review=False,data_quality="suspended_day", position_result=self._compute_position(data, date), note="全天停牌（V[t]==0），不判定为低量柱，停牌日排除在计算窗口外", ) # 边界4：V[t-1]==0（停牌后首日），剔除停牌日后重新计算（规格第5节第1条） prev_vol = volume[idx - 1] if idx - 1 >= 0 else None suspended_prev = DataLoader.is_suspended(prev_vol) # 标准A：V[t] == LLV(V, 10) criterion_a, llv_10 = self._check_criterion_a(volume, idx) # 标准B：连续5日递减且V[t]==LLV(V,10) criterion_b, shrink_days = self._check_criterion_b(volume, idx) is_signal = criterion_a or criterion_b # match_criteria if criterion_a and criterion_b: match_criteria = "A+B" elif criterion_a: match_criteria = "A" elif criterion_b: match_criteria = "B" else: match_criteria = "none" # 极端缩量检测（规格第5节第7条） extreme_shrink = False needs_human_review = False if prev_vol is not None and prev_vol > 0 and current_vol < prev_vol * self.EXTREME_SHRINK_RATIO:extreme_shrink = True needs_human_review = True position_result = self._compute_position(data, date) note_parts = [] if suspended_prev: note_parts.append("前一日停牌（V[t-1]==0），已剔除停牌日重新计算LLV") if idx < self.LLV_WINDOW - 1: note_parts.append("上市不足10日，标准A（LLV10）不可用，仅标准B生效（需至少5个有效交易日）") if extreme_shrink: note_parts.append("极端缩量（V[t] < V[t-1] × 0.1），需人工复核，不得直接作为交易依据") return self._build_result( idx=idx, current_date=current_date, is_signal=is_signal, criterion_a=criterion_a, criterion_b=criterion_b, match_criteria=match_criteria, v_t=current_vol, llv_10=llv_10, shrink_days=shrink_days, extreme_shrink=extreme_shrink, needs_human_review=needs_human_review, data_quality="valid", position_result=position_result, note="；".join(note_parts) if note_parts else None, ) def _check_criterion_a(self, volume: List[float], idx: int) -> tuple:"""标准A：V[t] == LLV(V, 10) Returns: (is_match, llv_10)：是否命中，近10日最低量值 """ if idx < self.LLV_WINDOW - 1: return False, None window = volume[idx - self.LLV_WINDOW + 1: idx + 1] valid = [v for v in window if v is not None and v >= 0 and v > 0] if not valid: return False, None llv_10 = min(valid) return volume[idx] == llv_10, llv_10 def _check_criterion_b(self, volume: List[float], idx: int) -> tuple: """标准B：连续5日递减且V[t]==LLV(V,10) Returns: (is_match, shrink_days)：是否命中，连续递减天数 """ if idx < self.SHRINK_B_DAYS - 1: return False, 0 # 检查连续5日严格递减：V[t] < V[t-1] < V[t-2] < V[t-3] < V[t-4] for i in range(idx - self.SHRINK_B_DAYS + 1, idx): v_curr = volume[i + 1] if i + 1 < len(volume) else None v_prev = volume[i] if i < len(volume) else None if v_curr is None or v_prev is None or v_curr <= 0 or v_prev <= 0:return False, 0 if not (v_curr < v_prev): return False, 0 # 同时要求V[t] == LLV(V,10) criterion_a, _ = self._check_criterion_a(volume, idx) if not criterion_a: return False, 0 return True, self.SHRINK_B_DAYS def _get_nature(self, position: str) -> str: """低量柱位置-性质映射（引用 spec_global_rules.md 映射表）""" if position == "low": return "底部抛压枯竭/变盘前兆信号（原著：低量柱是下跌的撑力计）" elif position == "high": return "高位缩量/观望信号（整理者分析，非权威来源）" elif position == "mid": return "中性/换手性质（原著未明确定义，为整理者分析，非权威来源）" return "无法判定性质" def _build_result( self, idx: int, current_date: Optional[str], is_signal: bool, criterion_a: bool, criterion_b: bool, match_criteria: str, v_t: Optional[float], llv_10: Optional[float], shrink_days: int, extreme_shrink: bool, needs_human_review: bool, data_quality: str, position_result: Dict[str, Any],note: Optional[str] = None, ) -> Dict[str, Any]: """构建输出JSON（字段对齐规格第6节 + addendum）""" position = position_result.get("position", "unknown") nature = self._get_nature(position) result: Dict[str, Any] = { "signal_id": self.signal_id, "signal_name": self.signal_name, "date": current_date, "is_signal": is_signal, "match_criteria": match_criteria, "values": { "v_t": v_t, "llv_10": llv_10, "shrink_days": shrink_days, "extreme_shrink": extreme_shrink, "needs_human_review": needs_human_review, }, "confirmation_date": current_date, "data_quality": data_quality, "criterion_a": criterion_a, "criterion_b": criterion_b, "position": position, "nature": nature, "position_detail": position_result, } if note: result["note"] = note return result
+"""低量柱信号卡 - 规格卡2
+
+规格来源：spec_batch1_basic_volume.md 规格卡2（低量柱）
+补充：spec_batch1_addendum.md（追加 position/nature 字段）
+原著：《量柱擒涨停》（第4版）第二单元"低量柱——下跌与上涨的撑力计"
+零未来函数：低量柱为当日确认信号（T日收盘后），仅使用当日及之前数据。
+
+判定标准：
+  A: V[t] == LLV(V, 10)  （近10日最低量）
+  B: V[t] < V[t-1] < V[t-2] < V[t-3] < V[t-4] 且 V[t] == LLV(V, 10)  （连续5日萎缩至阶段最小）
+  总判定：A OR B
+
+位置-性质映射（spec_global_rules.md）：
+  低位：底部抛压枯竭/变盘前兆信号
+  中位：中性/换手性质
+  高位：高位缩量/观望信号
+"""
+
+from typing import Any, Dict, List, Optional
+
+from .base import BaseSignal
+from ..utils.data_loader import DataLoader
+
+
+class LowVolumeSignal(BaseSignal):
+    """低量柱信号检测引擎"""
+
+    signal_id = "low_volume"
+    signal_name = "低量柱"
+
+    LLV_WINDOW = 10
+    SHRINK_B_DAYS = 5
+    EXTREME_SHRINK_RATIO = 0.1
+
+    def detect(self, data: Dict[str, Any], date: Optional[str] = None) -> Dict[str, Any]:
+        """检测低量柱信号
+
+        Args:
+            data: 行情数据，须包含 volume 列表，可选 dates 列表
+            date: 判定日期，默认为最后一日
+
+        Returns:
+            信号判定结果JSON（字段对齐 spec_batch1_basic_volume.md 第6节 + addendum）
+        """
+        volume: List[float] = data.get("volume", [])
+        dates: List[str] = data.get("dates", [])
+
+        # 确定判定索引
+        if date is not None and dates:
+            try:
+                idx = dates.index(date)
+            except ValueError:
+                idx = len(volume) - 1
+        else:
+            idx = len(volume) - 1
+
+        current_date = dates[idx] if (dates and idx < len(dates)) else None
+
+        # 边界1：新股上市首日不判定（规格第5节第2条）
+        if DataLoader.is_new_stock_first_day(data, idx):
+            return self._build_result(
+                idx=idx, current_date=current_date, is_signal=False,
+                criterion_a=False, criterion_b=False,
+                match_criteria="none", v_t=None, llv_10=None,
+                shrink_days=0, extreme_shrink=False, needs_human_review=False,
+                data_quality="new_stock_first_day",
+                position_result=self._compute_position(data, date),
+                note="新股上市首日，不判定低量柱（需上市满10个交易日后启用）",
+            )
+
+        # 边界2：当日成交量数据异常（规格第5节第4条）
+        current_vol = volume[idx] if idx < len(volume) else None
+        if current_vol is None or current_vol < 0:
+            return self._build_result(
+                idx=idx, current_date=current_date, is_signal=False,
+                criterion_a=False, criterion_b=False,
+                match_criteria="none", v_t=None, llv_10=None,
+                shrink_days=0, extreme_shrink=False, needs_human_review=False,
+                data_quality="invalid_volume",
+                position_result=self._compute_position(data, date),
+                note="当日成交量数据异常（负数或空值），不判定低量柱",
+            )
+
+        # 边界3：全天停牌（V[t]==0），不判定为低量柱（规格第5节第6条）
+        if current_vol == 0:
+            return self._build_result(
+                idx=idx, current_date=current_date, is_signal=False,
+                criterion_a=False, criterion_b=False,
+                match_criteria="none", v_t=current_vol, llv_10=None,
+                shrink_days=0, extreme_shrink=False, needs_human_review=False,
+                data_quality="suspended_day",
+                position_result=self._compute_position(data, date),
+                note="全天停牌（V[t]==0），不判定为低量柱，停牌日排除在计算窗口外",
+            )
+
+        # 边界4：V[t-1]==0（停牌后首日），剔除停牌日后重新计算（规格第5节第1条）
+        prev_vol = volume[idx - 1] if idx - 1 >= 0 else None
+        suspended_prev = DataLoader.is_suspended(prev_vol)
+
+        # 标准A：V[t] == LLV(V, 10)
+        criterion_a, llv_10 = self._check_criterion_a(volume, idx)
+
+        # 标准B：连续5日递减且V[t]==LLV(V,10)
+        criterion_b, shrink_days = self._check_criterion_b(volume, idx)
+
+        is_signal = criterion_a or criterion_b
+
+        # match_criteria
+        if criterion_a and criterion_b:
+            match_criteria = "A+B"
+        elif criterion_a:
+            match_criteria = "A"
+        elif criterion_b:
+            match_criteria = "B"
+        else:
+            match_criteria = "none"
+
+        # 极端缩量检测（规格第5节第7条）
+        extreme_shrink = False
+        needs_human_review = False
+        if prev_vol is not None and prev_vol > 0 and current_vol < prev_vol * self.EXTREME_SHRINK_RATIO:
+            extreme_shrink = True
+            needs_human_review = True
+
+        position_result = self._compute_position(data, date)
+
+        note_parts = []
+        if suspended_prev:
+            note_parts.append("前一日停牌（V[t-1]==0），已剔除停牌日重新计算LLV")
+        if idx < self.LLV_WINDOW - 1:
+            note_parts.append("上市不足10日，标准A（LLV10）不可用，仅标准B生效（需至少5个有效交易日）")
+        if extreme_shrink:
+            note_parts.append("极端缩量（V[t] < V[t-1] × 0.1），需人工复核，不得直接作为交易依据")
+
+        return self._build_result(
+            idx=idx, current_date=current_date, is_signal=is_signal,
+            criterion_a=criterion_a, criterion_b=criterion_b,
+            match_criteria=match_criteria, v_t=current_vol,
+            llv_10=llv_10, shrink_days=shrink_days,
+            extreme_shrink=extreme_shrink, needs_human_review=needs_human_review,
+            data_quality="valid",
+            position_result=position_result,
+            note="；".join(note_parts) if note_parts else None,
+        )
+
+    def _check_criterion_a(self, volume: List[float], idx: int) -> tuple:
+        """标准A：V[t] == LLV(V, 10)
+
+        Returns:
+            (is_match, llv_10)：是否命中，近10日最低量值
+        """
+        if idx < self.LLV_WINDOW - 1:
+            return False, None
+        window = volume[idx - self.LLV_WINDOW + 1: idx + 1]
+        valid = [v for v in window if v is not None and v >= 0 and v > 0]
+        if not valid:
+            return False, None
+        llv_10 = min(valid)
+        return volume[idx] == llv_10, llv_10
+
+    def _check_criterion_b(self, volume: List[float], idx: int) -> tuple:
+        """标准B：连续5日递减且V[t]==LLV(V,10)
+
+        Returns:
+            (is_match, shrink_days)：是否命中，连续递减天数
+        """
+        if idx < self.SHRINK_B_DAYS - 1:
+            return False, 0
+
+        # 检查连续5日严格递减：V[t] < V[t-1] < V[t-2] < V[t-3] < V[t-4]
+        for i in range(idx - self.SHRINK_B_DAYS + 1, idx):
+            v_curr = volume[i + 1] if i + 1 < len(volume) else None
+            v_prev = volume[i] if i < len(volume) else None
+            if v_curr is None or v_prev is None or v_curr <= 0 or v_prev <= 0:
+                return False, 0
+            if not (v_curr < v_prev):
+                return False, 0
+
+        # 同时要求V[t] == LLV(V,10)
+        criterion_a, _ = self._check_criterion_a(volume, idx)
+        if not criterion_a:
+            return False, 0
+
+        return True, self.SHRINK_B_DAYS
+
+    def _get_nature(self, position: str) -> str:
+        """低量柱位置-性质映射（引用 spec_global_rules.md 映射表）"""
+        if position == "low":
+            return "底部抛压枯竭/变盘前兆信号（原著：低量柱是下跌的撑力计）"
+        elif position == "high":
+            return "高位缩量/观望信号（整理者分析，非权威来源）"
+        elif position == "mid":
+            return "中性/换手性质（原著未明确定义，为整理者分析，非权威来源）"
+        return "无法判定性质"
+
+    def _build_result(
+        self, idx: int, current_date: Optional[str], is_signal: bool,
+        criterion_a: bool, criterion_b: bool, match_criteria: str,
+        v_t: Optional[float], llv_10: Optional[float],
+        shrink_days: int, extreme_shrink: bool, needs_human_review: bool,
+        data_quality: str, position_result: Dict[str, Any],
+        note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """构建输出JSON（字段对齐规格第6节 + addendum）"""
+        position = position_result.get("position", "unknown")
+        nature = self._get_nature(position)
+
+        result: Dict[str, Any] = {
+            "signal_id": self.signal_id,
+            "signal_name": self.signal_name,
+            "date": current_date,
+            "is_signal": is_signal,
+            "match_criteria": match_criteria,
+            "values": {
+                "v_t": v_t,
+                "llv_10": llv_10,
+                "shrink_days": shrink_days,
+                "extreme_shrink": extreme_shrink,
+                "needs_human_review": needs_human_review,
+            },
+            "confirmation_date": current_date,
+            "data_quality": data_quality,
+            "criterion_a": criterion_a,
+            "criterion_b": criterion_b,
+            "position": position,
+            "nature": nature,
+            "position_detail": position_result,
+        }
+        if note:
+            result["note"] = note
+        return result

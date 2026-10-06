@@ -36,7 +36,8 @@ class TestDoubleVolumeStandard:
         assert result["values"]["volume_ratio"] == 2.0
         assert result["values"]["c_t"] == 10.50
         assert result["values"]["c_t_1"] == 10.00
-def test_volume_ok_but_price_not_ok(self, signal):
+
+    def test_volume_ok_but_price_not_ok(self, signal):
         """测试用例2：量能达标但价格不达标（放量下跌）"""
         volumes = [5000, 10000]
         closes = [10.00, 9.80]
@@ -65,7 +66,7 @@ def test_volume_ok_but_price_not_ok(self, signal):
 
 
 class TestDoubleVolumeBoundary:
-"""边界情况"""
+    """边界情况"""
 
     def test_new_stock_first_day(self, signal):
         """新股上市首日不判定"""
