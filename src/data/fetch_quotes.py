@@ -54,7 +54,9 @@ UA = {
     'Referer': 'https://quote.eastmoney.com/',
 }
 TIMEOUT = 15
+ALL_MARKET_TIMEOUT = 8       # 全市场模式超时（秒），快速失败降级
 MAX_WORKERS = 5
+ALL_MARKET_WORKERS = 20      # 全市场模式并发
 
 # 自选池（已迁移到 Watchlist，保留此常量仅作默认初始化参考）
 # 实际股票池请使用: python -m data.watchlist list/add/remove
@@ -109,11 +111,11 @@ def _bar(time_str, o, h, l, c, v):
 # 日线数据源
 # ---------------------------------------------------------------------------
 
-def daily_from_tencent(code, datalen=120):
+def daily_from_tencent(code, datalen=120, timeout=None):
     """腾讯前复权日线。"""
     url = ('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?'
            f'param={code},day,,,{datalen},qfq')
-    j = requests.get(url, headers=UA, timeout=TIMEOUT).json()
+    j = requests.get(url, headers=UA, timeout=timeout or TIMEOUT).json()
     node = (j.get('data') or {}).get(code) or {}
     rows = node.get('qfqday') or node.get('day') or []
     out = []
@@ -123,7 +125,7 @@ def daily_from_tencent(code, datalen=120):
     return out
 
 
-def daily_from_sina(code, datalen=120):
+def daily_from_sina(code, datalen=120, timeout=None):
     """新浪日线（akshare stock_zh_a_hist，前复权）。"""
     try:
         import akshare as ak
@@ -146,14 +148,14 @@ def daily_from_sina(code, datalen=120):
     return out
 
 
-def daily_from_eastmoney(code, datalen=120):
+def daily_from_eastmoney(code, datalen=120, timeout=None):
     """东财前复权日线。"""
     mkt = '1' if code.startswith('sh') else '0'
     url = ('https://push2his.eastmoney.com/api/qt/stock/kline/get?'
            f'secid={mkt}.{code[2:]}&fields1=f1,f2,f3,f4,f5,f6'
            f'&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1'
            f'&end=20500101&lmt={datalen}')
-    j = requests.get(url, headers=UA, timeout=TIMEOUT).json()
+    j = requests.get(url, headers=UA, timeout=timeout or TIMEOUT).json()
     rows = (j.get('data') or {}).get('klines') or []
     out = []
     for s in rows:  # 东财顺序: 日期,开,收,高,低,量
@@ -167,6 +169,13 @@ DAILY_SOURCES = [
     ('腾讯', daily_from_tencent),
     ('新浪', daily_from_sina),
     ('东财', daily_from_eastmoney),
+]
+
+# 全市场模式源顺序：东财优先（push2his 接口在 CI 环境下更稳定）
+ALL_MARKET_SOURCES = [
+    ('东财', daily_from_eastmoney),
+    ('腾讯', daily_from_tencent),
+    ('新浪', daily_from_sina),
 ]
 
 
@@ -256,15 +265,25 @@ MIN1_SOURCES = [
 # 多源降级抓取
 # ---------------------------------------------------------------------------
 
-def fetch_daily(code, datalen=120):
-    """日线多源降级：腾讯→新浪→东财，返回 (源名, bars)。"""
-    for name, fn in DAILY_SOURCES:
+def fetch_daily(code, datalen=120, timeout=None, sources=None):
+    """日线多源降级，返回 (源名, bars)。
+
+    Args:
+        code: 股票代码
+        datalen: 拉取根数
+        timeout: 单源超时（秒），默认全局 TIMEOUT
+        sources: 源列表 [(名, 函数), ...]，默认 DAILY_SOURCES
+    """
+    timeout = timeout or TIMEOUT
+    src_list = sources or DAILY_SOURCES
+    for name, fn in src_list:
         try:
-            bars = fn(code, datalen)
+            bars = fn(code, datalen, timeout=timeout)
             if bars:
                 return name, bars
         except Exception as e:
-            log.warn(f'[{name}] {code} 日线失败: {type(e).__name__}: {e}')
+            # 全市场场景下失败很常见，不逐条打 warn（由调用方汇总）
+            pass
     return None, None
 
 
@@ -470,9 +489,14 @@ def _validate_and_record(code, data_type, source, bars):
         return True, [], {"bar_count": len(bars)}
 
 
-def daily_worker(code, datalen, full=False):
-    time.sleep(0.15)  # 轻微限速
-    src, bars = fetch_daily(code, datalen)
+def daily_worker(code, datalen, full=False, all_market=False):
+    if not all_market:
+        time.sleep(0.15)  # 轻微限速（全市场模式跳过，靠并发控制）
+    if all_market:
+        src, bars = fetch_daily(code, datalen, timeout=ALL_MARKET_TIMEOUT,
+                                sources=ALL_MARKET_SOURCES)
+    else:
+        src, bars = fetch_daily(code, datalen)
     if not bars:
         return False, None
     path = kline_path(code)
@@ -509,9 +533,16 @@ def min1_worker(code):
     return True, src
 
 
-def run_threaded(codes, worker, max_workers=None):
+def run_threaded(codes, worker, max_workers=None, progress_every=0):
+    """并发执行 worker，返回 (成功数, 失败列表, 源分布)。
+
+    Args:
+        progress_every: 每完成 N 只打一次进度日志（0=不打）
+    """
     ok, failed, sources = 0, [], {}
     workers = max_workers or MAX_WORKERS
+    total = len(codes)
+    done = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(worker, c): c for c in codes}
         for fut in as_completed(futs):
@@ -526,6 +557,9 @@ def run_threaded(codes, worker, max_workers=None):
                 sources[src] = sources.get(src, 0) + 1
             else:
                 failed.append(code)
+            done += 1
+            if progress_every > 0 and done % progress_every == 0:
+                log.info(f'进度: {done}/{total}（成功{ok}，失败{len(failed)}）')
     return ok, failed, sources
 
 
@@ -581,8 +615,14 @@ def run_fetch(args):
         log.info('当前处于 A 股交易时段，跳过日线拉取（避免盘中数据不完整）')
     else:
         log.info(f'日线模式: {"全量重建" if args.full else "增量合并"}（{args.days} 根）')
-        workers = 12 if all_market_mode else MAX_WORKERS
-        ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full), max_workers=workers)
+        if all_market_mode:
+            workers = ALL_MARKET_WORKERS
+            log.info(f'全市场模式: {len(codes)} 只，并发{workers}，超时{ALL_MARKET_TIMEOUT}s，东财优先')
+            ok, failed, sources = run_threaded(
+                codes, lambda c: daily_worker(c, args.days, args.full, all_market=True),
+                max_workers=workers, progress_every=500)
+        else:
+            ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
         log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
         log.info(f'日线源分布: {sources}')
         if failed:
