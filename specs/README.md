@@ -17,7 +17,7 @@
 量学解盘引擎/
 ├── PROJECT_MEMORY.md          （项目知识库，唯一真相源）
 ├── README.md                  （本文件）
-├── specs/                     （规格说明书，11份）
+├── specs/                     （规格说明书，12份）
 │   ├── spec_principles.md     （公理层）
 │   ├── spec_global_rules.md   （全局规则层）
 │   ├── spec_batch1_basic_volume.md   （批次1：7张基础量柱卡）
@@ -27,7 +27,8 @@
 │   ├── spec_batch3_price_line.md     （批次3：8条量线绘制规则）
 │   ├── spec_batch4_line_technique.md （批次4：10张量线战法卡）
 │   ├── spec_batch5_wave.md           （批次5：9张量波规格卡）
-│   └── spec_batch6_combination_technique.md  （批次6：12张组合战法卡）
+│   ├── spec_batch6_combination_technique.md  （批次6：12张组合战法卡）
+│   └── spec_batch7_twelve_words.md   （批次7：3张十二字令卡）
 ├── docs/                      （理论著作交付物，暂未上传）
 ├── src/                       （代码实现，待建）
 ├── tests/                     （测试用例，待建）
@@ -62,6 +63,7 @@
 | 量线层 | batch3 + batch4 | 8条量线绘制规则；10张量线战法卡 |
 | 量波层 | batch5 | 9张量波规格卡 |
 | 组合层 | batch6 | 12张组合战法卡 |
+| 准则层 | batch7 | 3张十二字令卡（阳胜柱/阴胜柱/小倍阳） |
 
 ## 项目文档
 
