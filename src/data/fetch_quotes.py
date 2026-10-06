@@ -458,16 +458,15 @@ def run_threaded(codes, worker):
 # 主流程
 # ---------------------------------------------------------------------------
 
-def main():
-    ap = argparse.ArgumentParser(description='行情拉取（日线+1分钟）· 四源降级版')
-    ap.add_argument('--full', action='store_true', help='强制全量重建日线（覆盖式）')
-    ap.add_argument('--days', type=int, default=120, help='日线拉取根数（默认120）')
-    ap.add_argument('--codes', nargs='*', help='只拉指定股票代码（如 sh600519 sz000688）')
-    ap.add_argument('--self-check', action='store_true', help='仅运行路径宪法自检')
-    ap.add_argument('--watchlist', action='store_true', help='仅打印自定义股票池')
-    ap.add_argument('--no-hs300', action='store_true', help='不拉沪深300，只拉自定义股票池')
-    args = ap.parse_args()
+def run_fetch(args):
+    """执行行情拉取（核心逻辑，可被管道调用）。
 
+    Args:
+        args: argparse.Namespace，须包含 full/days/codes/self_check/watchlist/no_hs300
+
+    Returns:
+        int: 0=成功, 1=失败
+    """
     # 路径宪法自检（前置校验）
     if not paths_self_check():
         log.error('路径宪法自检失败，终止运行')
@@ -522,6 +521,18 @@ def main():
 
     log.info('fetch_quotes.py 全部结束')
     return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description='行情拉取（日线+1分钟）· 四源降级版')
+    ap.add_argument('--full', action='store_true', help='强制全量重建日线（覆盖式）')
+    ap.add_argument('--days', type=int, default=120, help='日线拉取根数（默认120）')
+    ap.add_argument('--codes', nargs='*', help='只拉指定股票代码（如 sh600519 sz000688）')
+    ap.add_argument('--self-check', action='store_true', help='仅运行路径宪法自检')
+    ap.add_argument('--watchlist', action='store_true', help='仅打印自定义股票池')
+    ap.add_argument('--no-hs300', action='store_true', help='不拉沪深300，只拉自定义股票池')
+    args = ap.parse_args()
+    return run_fetch(args)
 
 
 if __name__ == '__main__':

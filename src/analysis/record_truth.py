@@ -2892,12 +2892,15 @@ def load_history_store(ledger_dir_path: Path) -> dict:
     return store
 
 
-def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.5（zijian 移植版）')
-    ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
-    ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
-    args = ap.parse_args()
+def run_analysis(args):
+    """执行真假量柱账本分析（核心逻辑，可被管道调用）。
 
+    Args:
+        args: argparse.Namespace，须包含 dry_run/no_delete
+
+    Returns:
+        int: 0=成功
+    """
     stats = {k: 0 for k in (
         'processed', 'real', 'suspect', 'fake', 'limit_exempt',
         'skipped_bj', 'skipped_incomplete', 'skipped_exists', 'skipped_bad',
@@ -3003,6 +3006,14 @@ def main():
     ledger.flush()
     print_summary(stats)
     return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.5（zijian 移植版）')
+    ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
+    ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
+    args = ap.parse_args()
+    return run_analysis(args)
 
 
 if __name__ == '__main__':

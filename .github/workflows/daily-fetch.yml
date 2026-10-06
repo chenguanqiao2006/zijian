@@ -1,6 +1,7 @@
-name: Daily Fetch
+name: Daily Pipeline
 
-# 每个交易日收盘后自动拉取行情数据
+# 每个交易日收盘后自动运行完整数据管道
+# 流程：行情拉取 → 数据校验 → 真假量柱分析 → 账本落盘
 # 北京时间 15:30 = UTC 07:30（周一至周五）
 # 注：GitHub Actions cron 为 UTC 时间；中国节假日休市日也会触发，但拉取不到新数据（自动跳过）
 
@@ -17,11 +18,15 @@ on:
         description: '包含沪深300（默认只拉自定义股票池）'
         required: false
         default: 'false'
+      dry_run:
+        description: '试运行（只分析不写账本）'
+        required: false
+        default: 'false'
 
 jobs:
-  fetch:
+  pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -39,7 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run fetch_quotes
+      - name: Run data pipeline (fetch + analysis)
         run: |
           cd src
           ARGS="--no-hs300"
@@ -49,25 +54,29 @@ jobs:
           if [ "${{ github.event.inputs.hs300 }}" = "true" ]; then
             ARGS=$(echo "$ARGS" | sed 's/--no-hs300//')
           fi
-          python -m data.fetch_quotes $ARGS
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python -m data.run_pipeline $ARGS
 
       - name: Commit and push data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 只添加数据文件（日线、状态、股票池、沪深300缓存）
-          # 不添加：1分钟中转数据、日志文件
+          # 添加数据文件：日线、状态、股票池、沪深300缓存、真假账本
+          # 不添加：1分钟中转数据、日志文件（已在 .gitignore 中忽略）
           git add data/kline/ 2>/dev/null || true
           git add data/fetch_status.json 2>/dev/null || true
           git add data/watchlist.json 2>/dev/null || true
           git add data/universe/ 2>/dev/null || true
+          git add data/analysis/ 2>/dev/null || true
 
           # 检查是否有变化
           if git diff --cached --quiet; then
             echo "无数据变化，跳过提交"
           else
-            git commit -m "chore(data): 自动拉取行情数据 $(date -u +'%Y-%m-%d')"
+            git commit -m "chore(data): 自动管道运行（拉取+账本）$(date -u +'%Y-%m-%d')"
             git push
             echo "数据已提交并推送"
           fi
