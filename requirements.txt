@@ -1,2 +1,4 @@
 pytest>=7.0
 pytest-cov>=4.0
+requests>=2.31
+akshare>=1.12
