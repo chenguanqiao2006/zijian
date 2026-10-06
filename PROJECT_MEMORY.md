@@ -5,7 +5,7 @@
 > 文档简称代号：档案。
 > 使用规则：任何大语言模型参与本项目前，须完整阅读本文档。
 > 维护责任：每次任务完成后，更新第七章（当前阶段）与第十二章（版本记录）。
-> 当前版本：v2.8
+> 当前版本：v2.9
 
 ---
 
@@ -259,12 +259,12 @@ spec_principles.md（公理层）
 | 批次7（十二字令） | 3 | 阳胜柱（yang_sheng_bar）、阴胜柱（yin_sheng_bar）、小倍阳（small_double_yang） |
 | 全局修饰器 | 2 | 位置判定（price_position）、位置-性质映射表（在 spec_global_rules.md 内） |
 
-### 6.5 代码实现成果（v2.7）
+### 6.5 代码实现成果（v2.9 更新）
 
 项目骨架（已建）文件清单：
 
 src/__init__.py
-src/signals/__init__.py（导出7个信号类）
+src/signals/__init__.py（导出9个信号类）
 src/signals/base.py（信号卡抽象基类）
 src/signals/high_volume.py（高量柱）
 src/signals/low_volume.py（低量柱）
@@ -273,6 +273,8 @@ src/signals/flat_volume.py（平量柱）
 src/signals/shrink_volume.py（缩量柱）
 src/signals/ladder_volume.py（梯量柱）
 src/signals/golden_volume.py（黄金柱）
+src/signals/general_volume.py（将军柱）
+src/signals/marshal_volume.py（元帅柱）
 src/global_rules/__init__.py
 src/global_rules/price_position.py（位置判定）
 src/utils/__init__.py
@@ -285,11 +287,13 @@ tests/test_flat_volume.py
 tests/test_shrink_volume.py
 tests/test_ladder_volume.py
 tests/test_golden_volume.py
+tests/test_general_volume.py
+tests/test_marshal_volume.py
 tests/test_price_position.py
 requirements.txt
 .github/workflows/test.yml
 
-已完成模块（v2.7）：
+已完成模块（v2.9）：
 
 | 模块 | 状态 | 测试数 |
 |:---|:---|:---:|
@@ -301,14 +305,19 @@ requirements.txt
 | 缩量柱 | 已实现 | 8 |
 | 梯量柱 | 已实现（含纯判定方法） | 8 |
 | 黄金柱 | 已实现（复用4信号卡的纯判定方法） | 11 |
+| 将军柱 | 已实现（复用批次1四纯判定方法） | 6 |
+| 元帅柱 | 已实现（依赖将军柱/黄金柱确认） | 6 |
 | GitHub Actions | 已配置（Python 3.10/3.11双版本） | — |
 
-累计测试结果：66 passed / 0 failed
+累计测试结果：78 passed / 0 failed
 
-批次1代码关键实现：
+批次1+批次2代码关键实现：
 - 黄金柱阳胜柱条件严格实现（找阴柱 + 严格大于判定）
 - 黄金柱基柱候选复用4个信号卡的纯判定方法
+- 将军柱复用批次1四纯判定方法 + 严格阳胜柱条件
+- 元帅柱依赖将军柱/黄金柱确认结果（跳空缺口 + 王牌柱确认）
 - 各信号卡新增纯判定方法供复合信号复用
+- 位置判定使用基柱日（不是确认日T+3日）
 
 代码存储位置：
 - 豆包本地工作区：/home/user/.doubao/agent_mode/workspace/量学解盘引擎/
@@ -331,30 +340,35 @@ requirements.txt
   - 项目骨架搭建完成
   - 位置判定模块完成（6测试通过）
   - 批次1全部7张卡完成（66测试通过）
+  - 批次2王牌柱完成（将军柱+元帅柱，12测试新增）
+  - 累计测试：78 passed / 0 failed
   - 修复2处规格偏差（黄金柱阳胜柱简化、黄金柱基柱候选简化）
+  - 修正位置判定口径（用基柱日，非确认日）
 
 代码实现阶段（进行中）：
-- 已完成：骨架 + 位置判定 + 批次1全部7张卡
-- 待完成：批次2（将军柱、元帅柱）代码实现
-- 后续：批次3-7 代码实现
+- 已完成：骨架 + 位置判定 + 批次1（7张卡）+ 批次2（2张王牌柱）
+- 待完成：批次3（量线绘制规则，8条）
+- 后续：批次4-7 代码实现
 
 ### 7.2 建议优先事项
 
-1. 继续代码实现：批次2（王牌柱）代码——将军柱、元帅柱
+1. 继续代码实现：批次3（量线绘制规则）——8条量线
 2. 每完成一批卡更新档案一次
 
 ### 7.3 未完成项待办
 
 A. 代码实现待办
 - 批次1全部7张卡已完成
-- 批次2代码实现：将军柱、元帅柱（下一步）
-- 批次3-7代码实现（后续批次）
+- 批次2王牌柱已完成
+- 批次3代码实现：8条量线绘制规则（下一步）
+- 批次4-7代码实现（后续批次）
 - 代码需同步到 GitHub（豆包环境无法直接 push）
 
 B. 规格文件内部细节
 - spec_batch7 v1.2 中，阴胜柱/阳胜柱的"当前柱为假阴真阳/假阳真阴"边界情况细节待后续版本补充
 - spec_batch5 中量波信号的"分时零未来函数"验证机制待代码实现时建立
 - spec_global_rules.md 中位置判定的1条极端边界（停牌超过250日区间失效）暂未实现，记入待办
+- 元帅柱"先者优先"（多个王牌柱并存时的去重逻辑）：属于信号应用层功能，待后续做"信号扫描器"时统一处理
 
 C. 【未能核实】项（已归档，不再投入）
 - 腾龙飞天/双圈/拉拐/替领/龙门擒龙五个高级模型的官方定义（原著正文原文）——终止核实
@@ -453,6 +467,7 @@ E. docs/ 目录（确定不上传，v2.5）
 | 43 | 文件名判定以元数据为准 | 判定文件是否存在、名称是否正确，应以元数据为准 |
 | 44 | 黄金柱基柱候选定义澄清 | 梯量柱第一柱 = 梯量序列起点；平量柱第二柱 = 平量序列第二根；spec_batch1 v1.1 已追加 |
 | 45 | 信号卡纯判定方法复用 | 各信号卡新增 is_xxx(data, idx) 纯判定方法，供复合信号（黄金柱）复用 |
+| 46 | 批次2规格歧义处理（v2.9 新增） | ①元帅柱"先者优先"属于应用层功能，记入待办；②元帅柱 position 用 T日（跳空日/基柱日），按规格卡第7节原文；③将军柱 nature 映射按规格卡执行。3项均不改代码、不改规格 |
 
 ---
 
@@ -482,8 +497,8 @@ E. docs/ 目录（确定不上传，v2.5）
 如果你正在读这段文字，说明你已被指派接手本项目。请确认：
 
 - 项目定位：量学解盘引擎（不预测、不交易，只做形态识别与术语转译）
-- 已完成：规格体系（12份文件）+ HTML 6份 + README + 批次1代码（7张卡，66测试通过）
-- 当前阶段：代码实现进行中——批次1完成，批次2（王牌柱）待做
+- 已完成：规格体系（12份文件）+ HTML 6份 + README + 批次1代码（7张卡）+ 批次2代码（2张王牌柱），累计78测试通过
+- 当前阶段：代码实现进行中——批次1+批次2完成，批次3（量线绘制规则）待做
 - 真相源：specs/ 目录下的文件，不是你的记忆
 - 你的职责：按项目负责人的指令，执行规格生成员或规格架构师的工作
 - 特别注意：若你不可联网，不得提供任何需联网核实的原始信息；一切非原著正文信息按 3.1 第9条线索分级处理；每次完成代码文件后须落盘飞书云盘
@@ -509,18 +524,18 @@ E. docs/ 目录（确定不上传，v2.5）
 │   ├── 05_涨停密码_纯理论版.html     （已修正出版信息）
 │   └── 06_操盘手记_主题索引导读.html
 ├── specs/                     （规格说明书，12份文件）
-│   ├── spec_principles.md     （公理层）
-│   ├── spec_global_rules.md   （全局规则层）
-│   ├── spec_batch1_basic_volume.md   （批次1，v1.1）
-│   ├── spec_batch1_addendum.md       （批次1补充v1）
-│   ├── spec_batch1_addendum_v2.md    （批次1补充v2）
-│   ├── spec_batch2_ace_pillar.md     （批次2）
-│   ├── spec_batch3_price_line.md     （批次3）
-│   ├── spec_batch4_line_technique.md （批次4）
-│   ├── spec_batch5_wave.md           （批次5）
-│   ├── spec_batch6_combination_technique.md  （批次6）
-│   └── spec_batch7_twelve_words.md   （批次7）
-├── src/                       （代码实现，批次1完成）
+│   ├── spec_principles.md
+│   ├── spec_global_rules.md
+│   ├── spec_batch1_basic_volume.md
+│   ├── spec_batch1_addendum.md
+│   ├── spec_batch1_addendum_v2.md
+│   ├── spec_batch2_ace_pillar.md
+│   ├── spec_batch3_price_line.md
+│   ├── spec_batch4_line_technique.md
+│   ├── spec_batch5_wave.md
+│   ├── spec_batch6_combination_technique.md
+│   └── spec_batch7_twelve_words.md
+├── src/                       （代码实现，批次1+批次2完成）
 │   ├── __init__.py
 │   ├── signals/
 │   │   ├── __init__.py
@@ -531,14 +546,16 @@ E. docs/ 目录（确定不上传，v2.5）
 │   │   ├── flat_volume.py    （完成）
 │   │   ├── shrink_volume.py  （完成）
 │   │   ├── ladder_volume.py  （完成）
-│   │   └── golden_volume.py  （完成）
+│   │   ├── golden_volume.py  （完成）
+│   │   ├── general_volume.py （完成）
+│   │   └── marshal_volume.py （完成）
 │   ├── global_rules/
 │   │   ├── __init__.py
 │   │   └── price_position.py （完成）
 │   └── utils/
 │       ├── __init__.py
 │       └── data_loader.py
-├── tests/                     （测试用例，66测试通过）
+├── tests/                     （测试用例，78测试通过）
 │   ├── __init__.py
 │   ├── test_high_volume.py
 │   ├── test_low_volume.py
@@ -547,6 +564,8 @@ E. docs/ 目录（确定不上传，v2.5）
 │   ├── test_shrink_volume.py
 │   ├── test_ladder_volume.py
 │   ├── test_golden_volume.py
+│   ├── test_general_volume.py
+│   ├── test_marshal_volume.py
 │   └── test_price_position.py
 ├── requirements.txt
 └── .github/
@@ -554,8 +573,7 @@ E. docs/ 目录（确定不上传，v2.5）
         └── test.yml           （GitHub Actions 配置）
 
 待建（后续代码实现）：
-- src/signals/general_volume.py（将军柱）
-- src/signals/marshal_volume.py（元帅柱）
+- src/signals/ 下批次3-7的对应模块（量线绘制、量线战法、量波、组合战法、十二字令）
 - 其余批次代码
 
 ---
@@ -567,6 +585,7 @@ E. docs/ 目录（确定不上传，v2.5）
 | v1.0-v2.6 | 2026-10-05 至 2026-10-06 | 规格体系构建期 + 维护期 + 代码启动期。累计完成：公理层+全局规则层+批次1-7（12份规格文件）；6份HTML内部修正；JSON key小写化（53处）；项目骨架+位置判定+高量柱代码。决策1-43全部记录在第九章。详细历史见各版本变更，此处合并为摘要。 |
 | v2.7 | 2026-10-06 | 批次1代码全部完成：7张卡实现完成，累计66 passed / 0 failed。修复2处规格偏差：黄金柱阳胜柱简化、黄金柱基柱候选简化。spec_batch1 v1.0→v1.1：追加基柱候选精确定义。9章新增决策44、45。 |
 | v2.8 | 2026-10-06 | 档案瘦身：单次可输出（消除超长截断问题）。第六章信号清单改表格；第九章45条决策保留完整一行一条；第十二章v1.0-v2.6合并为摘要；第1-5章准则完整保留；第7章当前阶段完整保留；第10-11章完整保留。内部消除嵌套三反引号（文件树用纯文本）。保证新窗口无缝接手。 |
+| v2.9 | 2026-10-06 | 批次2王牌柱代码完成：将军柱（6测试）、元帅柱（6测试）实现完成，累计78 passed / 0 failed。实现过程中修正位置判定口径（将军柱/元帅柱使用基柱日而非确认日T+3日，对齐规格卡第7节）。6.5更新为v2.9；7.1阶段任务更新；7.3 A/B项更新；9章新增决策46（批次2三个规格歧义处理决定：①元帅柱"先者优先"记入待办；②position用T日；③nature按规格卡执行） |
 
 ---
 
