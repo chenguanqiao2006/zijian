@@ -44,6 +44,7 @@ from src.analysis.record_truth import (
     compute_vwap_cross_count, compute_price_path_efficiency,
     compute_max_consecutive, compute_volume_price_quadrants,
     compute_volume_profile,
+    compute_vwap_slope, compute_vwap_std_band,
     detect_limit_status, compute_quant_pct, analyze_day,
     LedgerCache,
 )
@@ -1410,6 +1411,101 @@ class TestV31VolumeProfile:
             'high_volume_nodes', 'low_volume_nodes',
         )
         for field in v31_fields:
+            assert field in entry, f'缺少字段: {field}'
+
+
+# ---------------------------------------------------------------------------
+# v3.2 新信号：VWAP深入应用——斜率+标准差带
+# ---------------------------------------------------------------------------
+
+class TestV32VWAPDeep:
+    def test_vwap_slope_up(self):
+        # VWAP斜率为正（上行趋势）：价格持续上涨
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + i * 0.1  # 持续上涨
+            b['volume'] = volumes[i]
+        slope, direction = compute_vwap_slope(bars, volumes)
+        assert slope is not None
+        assert slope > 0  # 正斜率
+        assert direction == 'up'
+
+    def test_vwap_slope_down(self):
+        # VWAP斜率为负（下行趋势）：价格持续下跌
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 110 - i * 0.1  # 持续下跌
+            b['volume'] = volumes[i]
+        slope, direction = compute_vwap_slope(bars, volumes)
+        assert slope is not None
+        assert slope < 0  # 负斜率
+        assert direction == 'down'
+
+    def test_vwap_slope_flat(self):
+        # VWAP斜率接近0（震荡）：价格围绕均值波动
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 4 - 1.5) * 0.01  # 极小波动
+            b['volume'] = volumes[i]
+        slope, direction = compute_vwap_slope(bars, volumes)
+        assert slope is not None
+        assert direction == 'flat'
+
+    def test_vwap_std_basic(self):
+        # VWAP标准差带基本功能
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 10 - 5) * 0.5
+            b['volume'] = volumes[i]
+        vstd, zscore, band = compute_vwap_std_band(bars, volumes)
+        assert vstd is not None
+        assert vstd > 0
+        assert zscore is not None
+        assert band is not None
+
+    def test_vwap_std_high_volatility(self):
+        # 高波动：VWAP标准差大
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 4 - 1.5) * 5.0  # 大幅波动
+            b['volume'] = volumes[i]
+        vstd, _, _ = compute_vwap_std_band(bars, volumes)
+        assert vstd is not None
+        assert vstd > 1.0  # 标准差大
+
+    def test_vwap_zscore_extreme(self):
+        # 极端z-score：收盘极端偏离VWAP
+        bars = make_bars(n=100, price=100.0, vol=1000.0)
+        volumes = [1000.0] * 100
+        # 前99分钟在100附近震荡，最后1分钟暴涨
+        for i in range(99):
+            bars[i]['close'] = 100 + (i % 4 - 1.5) * 0.1
+            bars[i]['volume'] = volumes[i]
+        bars[99]['close'] = 110.0  # 最后暴涨10%
+        bars[99]['volume'] = 5000.0
+        vstd, zscore, band = compute_vwap_std_band(bars, volumes)
+        assert zscore is not None
+        assert zscore > 1.0  # 正的极端z-score
+
+    def test_analyze_day_v32_fields(self):
+        # analyze_day 返回值包含 v3.2 字段（5个）
+        bars = make_bars(n=240, price=100.0, vol=1000.0)
+        for i, b in enumerate(bars):
+            b['close'] = 100 + (i % 5) * 0.02
+            b['high'] = b['close'] + 0.03
+            b['low'] = b['close'] - 0.03
+        entry = analyze_day(bars, 'sh600519', 100.0)
+        assert entry is not None
+        v32_fields = (
+            'vwap_slope', 'vwap_slope_direction', 'vwap_std',
+            'price_vwap_zscore', 'vwap_band_position',
+        )
+        for field in v32_fields:
             assert field in entry, f'缺少字段: {field}'
 
 

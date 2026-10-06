@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-src/analysis/record_truth.py — 真假量柱账本分析器 v3.1（zijian 移植版）
+src/analysis/record_truth.py — 真假量柱账本分析器 v3.2（zijian 移植版）
 ==========================================================================
 
 职责链：
@@ -149,6 +149,20 @@ v3.1 相对 v3.0 的变更（Volume Profile——从价格维度看量分布，8
     [新增] low_volume_nodes       低量节点数：成交量<均值20%的价格bin数量（流动性空洞）。
     实现方式：将全天价格范围分为20个等宽bin，每根1分钟K线的量按收盘价归入对应bin。
     设计原则：全部只记录不入投票，从全新的"价格维度"榨干1分钟数据。
+
+v3.2 相对 v3.1 的变更（VWAP深入应用——斜率+标准差带，5个新字段）：
+    [新增] vwap_slope            VWAP斜率 = (尾盘30分钟VWAP均值 - 早盘30分钟VWAP均值)
+           / 早盘30分钟VWAP均值 × 100（%）。机构验证：趋势日VWAP有明确方向斜率，
+           震荡日VWAP走平。正值=VWAP上行（多头趋势），负值=VWAP下行（空头趋势）。
+    [新增] vwap_slope_direction  VWAP斜率方向：'up'（>|0.1%|）/ 'flat'（|≤0.1%|）/ 'down'。
+    [新增] vwap_std              价格相对VWAP的标准差。衡量价格围绕VWAP的波动幅度。
+           机构标配：±1σ='stretched'（偏离），±2σ='extreme'（极端）。
+    [新增] price_vwap_zscore     收盘相对VWAP的z-score = (收盘-VWAP)/vwap_std。
+           与vwap_deviation（百分比偏离）互补：z-score是标准化偏离，考虑了当日波动。
+    [新增] vwap_band_position    收盘在VWAP标准差带中的位置：
+           'below_2σ' / 'between_neg2_neg1' / 'between_neg1_0' /
+           'between_0_pos1' / 'between_pos1_pos2' / 'above_2σ'。
+    设计原则：全部只记录不入投票，深入挖掘VWAP这一机构核心指标。
 
 zijian 移植版改动：
     - 路径统一经 src/data/paths.py（目录宪法），不再硬编码
@@ -991,6 +1005,10 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
     # --- v3.1 新增：Volume Profile——从价格维度看量分布 ---
     vol_profile = compute_volume_profile(bars, volumes)
 
+    # --- v3.2 新增：VWAP深入应用——斜率+标准差带 ---
+    vwap_slope_result = compute_vwap_slope(bars, volumes)
+    vwap_std_result = compute_vwap_std_band(bars, volumes)
+
     # --- v2.6 新增：行为指纹（只记录，不入投票） ---
     vwap_hold_ratio = compute_vwap_hold_ratio(bars)
     weave_score = compute_weave_score(bars)
@@ -1098,6 +1116,12 @@ def analyze_day(bars, code, prev_close, history_data=None, market_vol_ratio=None
         'poc_volume_ratio': vol_profile['poc_volume_ratio'] if vol_profile else None,
         'high_volume_nodes': vol_profile['high_volume_nodes'] if vol_profile else None,
         'low_volume_nodes': vol_profile['low_volume_nodes'] if vol_profile else None,
+        # --- v3.2 新增：VWAP深入应用——斜率+标准差带 ---
+        'vwap_slope': vwap_slope_result[0],
+        'vwap_slope_direction': vwap_slope_result[1],
+        'vwap_std': vwap_std_result[0],
+        'price_vwap_zscore': vwap_std_result[1],
+        'vwap_band_position': vwap_std_result[2],
         'limit_status': None,
         'vprofile_24': build_feature_snapshot(volumes),
     }
@@ -1325,6 +1349,26 @@ def print_summary(stats: dict):
     if stats.get('hvn_n'):
         print(f'  Volume Profile: 高量节点={stats["hvn_sum"] / stats["hvn_n"]:.1f}个, '
               f'低量节点(流动性空洞)={stats["lvn_sum"] / stats["lvn_n"]:.1f}个')
+    # --- v3.2 VWAP斜率+标准差带 均值 ---
+    if stats.get('vs_n'):
+        print(f'  VWAP斜率={stats["vs_sum"] / stats["vs_n"]:+.4f}% '
+              f'(正=上行趋势, 负=下行趋势, 接近0=震荡)')
+    vsd_counts = stats.get('vsd_counts', {})
+    if vsd_counts:
+        print('  VWAP斜率方向:')
+        for d, cnt in sorted(vsd_counts.items(), key=lambda x: -x[1]):
+            print(f'    {d:6s}: {cnt:5d}  ({cnt / n:6.1%})')
+    if stats.get('vstd_n'):
+        print(f'  VWAP标准差={stats["vstd_sum"] / stats["vstd_n"]:.4f} '
+              f'(价格围绕VWAP的波动幅度)')
+    if stats.get('pvz_n'):
+        print(f'  收盘VWAP z-score={stats["pvz_sum"] / stats["pvz_n"]:+.4f} '
+              f'(标准化偏离, |z|>2=极端)')
+    vbp_counts = stats.get('vbp_counts', {})
+    if vbp_counts:
+        print('  收盘VWAP标准差带位置:')
+        for bp, cnt in sorted(vbp_counts.items(), key=lambda x: -x[1]):
+            print(f'    {bp:22s}: {cnt:5d}  ({cnt / n:6.1%})')
     print(f'{line}\n')
 
 
@@ -1530,6 +1574,25 @@ def process_file(path: Path, ledger: LedgerCache, stats: dict, dry_run: bool,
         if lvn is not None:
             stats['lvn_sum'] += lvn
             stats['lvn_n'] += 1
+        # v3.2 VWAP斜率+标准差带 累加
+        vs = entry.get('vwap_slope')
+        if vs is not None:
+            stats['vs_sum'] += vs
+            stats['vs_n'] += 1
+        vsd = entry.get('vwap_slope_direction')
+        if vsd:
+            stats['vsd_counts'][vsd] = stats['vsd_counts'].get(vsd, 0) + 1
+        vstd = entry.get('vwap_std')
+        if vstd is not None:
+            stats['vstd_sum'] += vstd
+            stats['vstd_n'] += 1
+        pvz = entry.get('price_vwap_zscore')
+        if pvz is not None:
+            stats['pvz_sum'] += pvz
+            stats['pvz_n'] += 1
+        vbp = entry.get('vwap_band_position')
+        if vbp:
+            stats['vbp_counts'][vbp] = stats['vbp_counts'].get(vbp, 0) + 1
 
     return entries
 
@@ -2022,6 +2085,114 @@ def compute_volume_profile(bars, volumes):
     }
 
 
+# ---------------------------------------------------------------------------
+# v3.2 新增：VWAP深入应用——斜率+标准差带
+# ---------------------------------------------------------------------------
+
+VWAP_SLOPE_THRESHOLD = 0.1  # VWAP斜率方向判定阈值（%），绝对值≤此值为走平
+
+
+def _compute_cumulative_vwap(bars, volumes):
+    """计算每分钟的累计VWAP序列。"""
+    if not bars or not volumes or sum(volumes) <= 0:
+        return []
+    closes = [b['close'] for b in bars]
+    cum_pv = 0.0
+    cum_v = 0.0
+    vwap_series = []
+    for i in range(len(bars)):
+        cum_pv += closes[i] * volumes[i]
+        cum_v += volumes[i]
+        if cum_v > 0:
+            vwap_series.append(cum_pv / cum_v)
+        else:
+            vwap_series.append(None)
+    return vwap_series
+
+
+def compute_vwap_slope(bars, volumes):
+    """v3.2 VWAP斜率。
+    = (尾盘30分钟VWAP均值 - 早盘30分钟VWAP均值) / 早盘30分钟VWAP均值 × 100（%）。
+    机构验证：趋势日VWAP有明确方向斜率，震荡日VWAP走平。
+    返回 (slope_pct, direction)，direction='up'/'flat'/'down'。
+    """
+    vwap_series = _compute_cumulative_vwap(bars, volumes)
+    if len(vwap_series) < 60:
+        return (None, None)
+
+    # 早盘30分钟VWAP（取第30分钟的累计VWAP，即前30分钟的VWAP）
+    morning_vwap = vwap_series[29] if vwap_series[29] else None
+    # 尾盘30分钟VWAP均值（最后30分钟的累计VWAP的均值）
+    tail_vwaps = [v for v in vwap_series[-30:] if v is not None]
+    if not tail_vwaps or morning_vwap is None or morning_vwap <= 0:
+        return (None, None)
+    tail_vwap = sum(tail_vwaps) / len(tail_vwaps)
+
+    slope_pct = round((tail_vwap - morning_vwap) / morning_vwap * 100, 4)
+
+    if slope_pct > VWAP_SLOPE_THRESHOLD:
+        direction = 'up'
+    elif slope_pct < -VWAP_SLOPE_THRESHOLD:
+        direction = 'down'
+    else:
+        direction = 'flat'
+
+    return (slope_pct, direction)
+
+
+def compute_vwap_std_band(bars, volumes):
+    """v3.2 VWAP标准差带。
+    计算每分钟价格相对当时累计VWAP的差值，然后求标准差。
+    返回 (vwap_std, price_vwap_zscore, vwap_band_position)。
+    vwap_std：价格相对VWAP的标准差（衡量波动幅度）
+    price_vwap_zscore：收盘相对VWAP的z-score = (收盘-最后VWAP)/vwap_std
+    vwap_band_position：收盘在标准差带中的位置
+    """
+    vwap_series = _compute_cumulative_vwap(bars, volumes)
+    if len(vwap_series) < 10:
+        return (None, None, None)
+
+    closes = [b['close'] for b in bars]
+
+    # 计算每分钟价格相对VWAP的差值
+    deviations = []
+    for i in range(len(closes)):
+        if vwap_series[i] is not None and vwap_series[i] > 0:
+            deviations.append(closes[i] - vwap_series[i])
+
+    if len(deviations) < 5:
+        return (None, None, None)
+
+    mean_dev = sum(deviations) / len(deviations)
+    variance = sum((d - mean_dev) ** 2 for d in deviations) / len(deviations)
+    vwap_std = math.sqrt(variance)
+
+    if vwap_std <= 0:
+        return (0.0, 0.0, 'between_0_pos1')
+
+    # 收盘相对VWAP的z-score
+    last_vwap = vwap_series[-1] if vwap_series[-1] else None
+    if last_vwap is None:
+        return (round(vwap_std, 4), None, None)
+    zscore = round((closes[-1] - last_vwap) / vwap_std, 4)
+
+    # 标准差带位置
+    if zscore < -2:
+        band = 'below_2σ'
+    elif zscore < -1:
+        band = 'between_neg2_neg1'
+    elif zscore < 0:
+        band = 'between_neg1_0'
+    elif zscore < 1:
+        band = 'between_0_pos1'
+    elif zscore < 2:
+        band = 'between_pos1_pos2'
+    else:
+        band = 'above_2σ'
+
+    return (round(vwap_std, 4), zscore, band)
+
+
 def load_market_volume(kline_dir_path: Path = None) -> dict:
     """v2.7 加载上证指数日线，计算每日大盘量比。
 
@@ -2107,7 +2278,7 @@ def load_history_store(ledger_dir_path: Path) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description='真假量柱账本 v3.1（zijian 移植版）')
+    ap = argparse.ArgumentParser(description='真假量柱账本 v3.2（zijian 移植版）')
     ap.add_argument('--dry-run', action='store_true', help='只分析，不写账本、不删源文件')
     ap.add_argument('--no-delete', action='store_true', help='写账本，但保留源文件')
     args = ap.parse_args()
@@ -2144,10 +2315,14 @@ def main():
         # v3.1 新增：Volume Profile
         'pocvr_sum', 'pocvr_n', 'vaw_sum', 'vaw_n',
         'civa_sum', 'civa_n', 'hvn_sum', 'hvn_n', 'lvn_sum', 'lvn_n',
+        # v3.2 新增：VWAP斜率+标准差带
+        'vs_sum', 'vs_n', 'vstd_sum', 'vstd_n', 'pvz_sum', 'pvz_n',
     )}
     stats['pattern_counts'] = {}  # v2.5 形态分布统计
     stats['basis_counts'] = {}    # v2.6 判定依据分布统计
     stats['pvd_counts'] = {}      # v2.8 量价背离分布统计
+    stats['vsd_counts'] = {}      # v3.2 VWAP斜率方向分布统计
+    stats['vbp_counts'] = {}      # v3.2 VWAP标准差带位置分布统计
 
     kline_1min_dir = min1_dir()  # 经目录宪法
     if not kline_1min_dir.exists():
