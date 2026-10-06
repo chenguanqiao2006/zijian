@@ -16,6 +16,10 @@ from .peak_line import PeakLine
 from .valley_line import ValleyLine
 from .balance_line import BalanceLine
 from .slant_line import SlantLine
+from .peak_valley_line import PeakValleyLine
+from .precision_line import PrecisionLine
+from .lighthouse_line import LighthouseLine
+from .channel_line import ChannelLine
 
 __all__ = [
     "BasePriceLine",
@@ -23,4 +27,8 @@ __all__ = [
     "ValleyLine",
     "BalanceLine",
     "SlantLine",
+    "PeakValleyLine",
+    "PrecisionLine",
+    "LighthouseLine",
+    "ChannelLine",
 ]
