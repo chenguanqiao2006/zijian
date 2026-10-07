@@ -53,11 +53,44 @@ def save_status(status: Dict[str, Any]) -> None:
         json.dump(status, f, ensure_ascii=False, indent=2)
 
 
+def update_stock_status_batch(updates: List[Dict[str, Any]]) -> None:
+    """批量更新拉取状态（一次性 load、批量更新、一次性 save）。
+
+    Args:
+        updates: 更新列表，每项为 dict，字段：
+            code, data_type, source, bar_count, trading_days,
+            date_range, is_valid, issues
+    """
+    if not updates:
+        return
+    status = load_status()
+    status["last_run"] = _now_str()
+
+    for u in updates:
+        code = validate_code(u["code"])
+        data_type = u["data_type"]
+
+        if code not in status["stocks"]:
+            status["stocks"][code] = {}
+
+        status["stocks"][code][data_type] = {
+            "last_fetch": _now_str(),
+            "source": u.get("source"),
+            "bar_count": u.get("bar_count", 0),
+            "trading_days": u.get("trading_days"),
+            "date_range": u.get("date_range", [None, None]),
+            "is_valid": u.get("is_valid", False),
+            "issues": list(u.get("issues", []))[:10],  # 最多保留10个问题
+        }
+
+    save_status(status)
+
+
 def update_stock_status(code: str, data_type: str, source: Optional[str],
                          bar_count: int, trading_days: Optional[int],
                          date_range: List[Optional[str]],
                          is_valid: bool, issues: List[str]) -> None:
-    """更新单只股票的拉取状态。
+    """更新单只股票的拉取状态（内部走批量接口）。
 
     Args:
         code: 股票代码（如 sh600519）
@@ -69,24 +102,16 @@ def update_stock_status(code: str, data_type: str, source: Optional[str],
         is_valid: 校验是否通过
         issues: 问题列表
     """
-    code = validate_code(code)
-    status = load_status()
-    status["last_run"] = _now_str()
-
-    if code not in status["stocks"]:
-        status["stocks"][code] = {}
-
-    status["stocks"][code][data_type] = {
-        "last_fetch": _now_str(),
+    update_stock_status_batch([{
+        "code": code,
+        "data_type": data_type,
         "source": source,
         "bar_count": bar_count,
         "trading_days": trading_days,
         "date_range": date_range,
         "is_valid": is_valid,
-        "issues": issues[:10],  # 最多保留10个问题
-    }
-
-    save_status(status)
+        "issues": issues,
+    }])
 
 
 def get_stock_status(code: str) -> Optional[Dict[str, Any]]:
