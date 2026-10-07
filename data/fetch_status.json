@@ -1,5 +1,5 @@
 {
-  "last_run": "2026-10-06 23:35:40",
+  "last_run": "2026-10-07 01:39:13",
   "stocks": {
     "sz000921": {
       "daily": {
@@ -1563,6 +1563,132 @@
         "trading_days": null,
         "date_range": [
           "2026-04-09",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh600584": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz300394": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh601138": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh603283": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz002156": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh000001": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sz300476": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh603516": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
+          "2026-09-30"
+        ],
+        "is_valid": true,
+        "issues": []
+      }
+    },
+    "sh601231": {
+      "min1": {
+        "last_fetch": "2026-10-07 01:39:13",
+        "source": "新浪",
+        "bar_count": 1970,
+        "trading_days": 9,
+        "date_range": [
+          "2026-09-17",
           "2026-09-30"
         ],
         "is_valid": true,
