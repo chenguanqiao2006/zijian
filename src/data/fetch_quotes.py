@@ -32,6 +32,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
@@ -47,6 +48,10 @@ from data.logger import get_logger
 from data.watchlist import Watchlist
 
 log = get_logger()
+
+# 待落盘的拉取状态（run_fetch 结尾一次性批量写入，避免逐只 load/save）
+_PENDING_STATUS_UPDATES = []
+_STATUS_LOCK = threading.Lock()
 
 CST = timezone(timedelta(hours=8))
 UA = {
@@ -170,6 +175,10 @@ DAILY_SOURCES = [
     ('新浪', daily_from_sina),
     ('东财', daily_from_eastmoney),
 ]
+
+# 日线各源失败计数（跨股票累计，用于汇总日志）
+_DAILY_FAIL_COUNTS = {name: 0 for name, _ in DAILY_SOURCES}
+_DAILY_FAIL_LOCK = threading.Lock()
 
 # 全市场模式源顺序：东财优先（push2his 接口在 CI 环境下更稳定）
 ALL_MARKET_SOURCES = [
@@ -352,6 +361,13 @@ MIN1_SOURCES = [
 # 多源降级抓取
 # ---------------------------------------------------------------------------
 
+def _log_daily_fail_stats(src_list):
+    """打一条日线源失败统计 INFO 日志。"""
+    names = [name for name, _ in src_list]
+    stats = ", ".join(f"{n}={_DAILY_FAIL_COUNTS.get(n, 0)}" for n in names)
+    log.info(f"日线源失败统计: {stats}")
+
+
 def fetch_daily(code, datalen=120, timeout=None, sources=None):
     """日线多源降级，返回 (源名, bars)。
 
@@ -363,14 +379,21 @@ def fetch_daily(code, datalen=120, timeout=None, sources=None):
     """
     timeout = timeout or TIMEOUT
     src_list = sources or DAILY_SOURCES
+    had_failure = False
     for name, fn in src_list:
         try:
             bars = fn(code, datalen, timeout=timeout)
             if bars:
+                if had_failure:
+                    _log_daily_fail_stats(src_list)
                 return name, bars
-        except Exception as e:
-            # 全市场场景下失败很常见，不逐条打 warn（由调用方汇总）
-            pass
+        except Exception:
+            # 全市场场景下失败很常见，不逐条打 warn，累计计数后汇总
+            had_failure = True
+            with _DAILY_FAIL_LOCK:
+                _DAILY_FAIL_COUNTS[name] = _DAILY_FAIL_COUNTS.get(name, 0) + 1
+    if had_failure:
+        _log_daily_fail_stats(src_list)
     return None, None
 
 
@@ -553,7 +576,7 @@ def _bars_to_dicts(bars):
 
 
 def _validate_and_record(code, data_type, source, bars):
-    """校验数据并更新拉取状态（统一入口）。"""
+    """校验数据并累积拉取状态（统一入口，run_fetch 结尾批量落盘）。"""
     try:
         dicts = _bars_to_dicts(bars)
         if data_type == "min1":
@@ -562,13 +585,18 @@ def _validate_and_record(code, data_type, source, bars):
         else:
             is_valid, issues, stats = data_validator.validate_daily(dicts, code)
             trading_days = None
-        data_status.update_stock_status(
-            code, data_type, source,
-            bar_count=stats.get("bar_count", len(bars)),
-            trading_days=trading_days,
-            date_range=stats.get("date_range", [None, None]),
-            is_valid=is_valid, issues=issues,
-        )
+        update = {
+            "code": code,
+            "data_type": data_type,
+            "source": source,
+            "bar_count": stats.get("bar_count", len(bars)),
+            "trading_days": trading_days,
+            "date_range": stats.get("date_range", [None, None]),
+            "is_valid": is_valid,
+            "issues": issues,
+        }
+        with _STATUS_LOCK:
+            _PENDING_STATUS_UPDATES.append(update)
         return is_valid, issues, stats
     except Exception as e:
         # 校验失败不影响数据保存，只记录
@@ -749,6 +777,11 @@ def run_fetch(args):
         log.info(f'1分钟源分布: {sources}')
         if failed:
             log.warn(f'1分钟失败清单(前20): {", ".join(failed[:20])}')
+
+    # --- 拉取状态批量落盘（一次性 load/save） ---
+    if _PENDING_STATUS_UPDATES:
+        data_status.update_stock_status_batch(_PENDING_STATUS_UPDATES)
+        _PENDING_STATUS_UPDATES.clear()
 
     # --- 拉取状态汇总（人类可读，保留 print） ---
     print()
