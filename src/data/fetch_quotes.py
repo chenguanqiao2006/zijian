@@ -176,16 +176,30 @@ DAILY_SOURCES = [
     ('东财', daily_from_eastmoney),
 ]
 
-# 日线各源失败计数（跨股票累计，用于汇总日志）
-_DAILY_FAIL_COUNTS = {name: 0 for name, _ in DAILY_SOURCES}
-_DAILY_FAIL_LOCK = threading.Lock()
-
 # 全市场模式源顺序：东财优先（push2his 接口在 CI 环境下更稳定）
 ALL_MARKET_SOURCES = [
     ('东财', daily_from_eastmoney),
     ('腾讯', daily_from_tencent),
     ('新浪', daily_from_sina),
 ]
+
+# 日线各源失败计数（跨股票累计，用于汇总日志）
+_DAILY_FAIL_COUNTS = {name: 0 for name, _ in DAILY_SOURCES}
+_DAILY_FAIL_LOCK = threading.Lock()
+
+
+def _reset_daily_fail_counts():
+    """重置日线源失败计数（每次 run_fetch 开始时调用）。"""
+    with _DAILY_FAIL_LOCK:
+        for k in _DAILY_FAIL_COUNTS:
+            _DAILY_FAIL_COUNTS[k] = 0
+
+
+def _log_daily_fail_summary():
+    """打印一条日线源失败汇总日志（全局累计，只打一次）。"""
+    with _DAILY_FAIL_LOCK:
+        stats = ", ".join(f"{n}={c}" for n, c in _DAILY_FAIL_COUNTS.items())
+    log.info(f"日线源失败统计(本次运行): {stats}")
 
 
 # ---------------------------------------------------------------------------
@@ -361,39 +375,22 @@ MIN1_SOURCES = [
 # 多源降级抓取
 # ---------------------------------------------------------------------------
 
-def _log_daily_fail_stats(src_list):
-    """打一条日线源失败统计 INFO 日志。"""
-    names = [name for name, _ in src_list]
-    stats = ", ".join(f"{n}={_DAILY_FAIL_COUNTS.get(n, 0)}" for n in names)
-    log.info(f"日线源失败统计: {stats}")
-
-
 def fetch_daily(code, datalen=120, timeout=None, sources=None):
     """日线多源降级，返回 (源名, bars)。
 
-    Args:
-        code: 股票代码
-        datalen: 拉取根数
-        timeout: 单源超时（秒），默认全局 TIMEOUT
-        sources: 源列表 [(名, 函数), ...]，默认 DAILY_SOURCES
+    失败不逐条打日志，只累计计数（由 run_fetch 结尾统一打一条汇总）。
     """
     timeout = timeout or TIMEOUT
     src_list = sources or DAILY_SOURCES
-    had_failure = False
     for name, fn in src_list:
         try:
             bars = fn(code, datalen, timeout=timeout)
             if bars:
-                if had_failure:
-                    _log_daily_fail_stats(src_list)
                 return name, bars
         except Exception:
-            # 全市场场景下失败很常见，不逐条打 warn，累计计数后汇总
-            had_failure = True
+            # 全市场场景下失败很常见，不逐条打日志，只累计
             with _DAILY_FAIL_LOCK:
                 _DAILY_FAIL_COUNTS[name] = _DAILY_FAIL_COUNTS.get(name, 0) + 1
-    if had_failure:
-        _log_daily_fail_stats(src_list)
     return None, None
 
 
@@ -711,6 +708,9 @@ def run_fetch(args):
         Watchlist().print_list()
         return 0
 
+    # 重置日线源失败计数（每次运行独立统计）
+    _reset_daily_fail_counts()
+
     now = beijing_now()
     trading = in_trading_hours(now)
     log.info(f'北京时间 {now:%Y-%m-%d %H:%M}  交易时段={trading}')
@@ -764,6 +764,8 @@ def run_fetch(args):
             ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
         log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
         log.info(f'日线源分布: {sources}')
+        # 日线源失败汇总（全局只打一次，避免刷屏）
+        _log_daily_fail_summary()
         if failed:
             log.warn(f'日线失败清单(前20): {", ".join(failed[:20])}')
 
