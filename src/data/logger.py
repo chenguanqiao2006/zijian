@@ -75,6 +75,8 @@ class FetchLogger:
             "%(asctime)s | %(levelname)-5s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
+        # %(asctime)s 默认走 time.localtime()（UTC），改为北京时间
+        fmt.converter = lambda ts: datetime.fromtimestamp(ts, CST).timetuple()
 
         # 控制台 handler（INFO 及以上）
         console = logging.StreamHandler()
