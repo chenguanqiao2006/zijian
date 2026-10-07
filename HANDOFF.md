@@ -17,7 +17,8 @@
 - 输出理解确认：项目边界、v3.6 坐标、最高优先（10-08 验证）、丞相职责边界、协作约束
 - 指出时序：档案记 10-07、验证在 10-08，当前处于"等 cron"静默窗口
 - 整理未决项清单供负责人调度
-- 验证 raw 链接可读性：raw.githubusercontent.com 纯文本链接可被对话型 AI 读取
+- 验证 raw 链接可读性：对话型 AI 能读 raw.githubusercontent.com 纯文本链接
+- 发现 CDN 缓存延迟：raw 链接更新后需加 ?v= 参数绕过缓存，否则读到旧版
 
 ## 下一步要做什么
 1. 等 2026-10-08 15:30 cron 跑完，去 Actions 看日线拉取结果
@@ -34,7 +35,8 @@
 - 真相源是 specs/ 目录文件，不是任何模型的记忆
 - 线索分级：①②可入规格，③④仅作档案线索
 - 对话型 AI（如网页版大模型）无直接访问 github.com 网页能力，开新窗口时优先发 raw 链接，读不到再手动粘贴
-- raw 链接格式：https://raw.githubusercontent.com/chenguanqiao2006/zijian/refs/heads/main/HANDOFF.md
+- raw 链接格式（加 ?v= 日期 绕过 CDN 缓存）：
+  https://raw.githubusercontent.com/chenguanqiao2006/zijian/refs/heads/main/HANDOFF.md?v=20261007
 - 国内访问 raw.githubusercontent.com 可能不稳定，如失败改用粘贴
 - Agent（如 MonkeyCode、豆包工作模式）有 git clone 能力，可直接读仓库
 
