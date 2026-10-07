@@ -299,6 +299,29 @@ GitHub Actions 首次成功运行（v3.2）：Python 3.10 + 3.11 双版本，**9
 
 累计测试结果：94 passed / 0 failed
 
+**数据采集层、分析层、量线层（v3.6 新增）**
+
+src/data/ 数据采集层：
+- paths.py         数据目录宪法（路径唯一真身）
+- fetch_quotes.py  行情拉取（日线+1分钟，四源自动降级）
+- validator.py     数据校验器
+- status.py        拉取状态跟踪器
+- logger.py        结构化日志记录器
+- watchlist.py     自定义股票池管理
+- run_pipeline.py  数据管道完整运行入口
+
+src/analysis/ 分析层：
+- record_truth.py  真假量柱账本分析器（v2.3 移植 → v3.5）
+
+src/price_lines/ 量线绘制层（批次3，8条全部完成）：
+峰顶线、谷底线、平衡线、斜衡线、峰谷线、精准线、灯塔线、通道线
+
+.github/workflows/：
+- test.yml          （原已有）
+- daily-fetch.yml   （#107 新增，每个交易日收盘后自动跑数据管道）
+
+测试总数：421 passed / 0 failed
+
 **aaa 项目数据管道（v3.5 新增）**
 
 aaa 仓库地址：https://github.com/chenguanqiao2006/aaa
@@ -358,9 +381,13 @@ aaa 数据层四件套源自 chenguanqiao2006/one：fetch_quotes.py、record_tru
   - 日线9只、1分钟305只已拉到（腾讯/新浪兜底）
   - scan_market.py 生成 1565 个信号（快照已落盘）
   - git commit + push 成功（f942846）
+- **批次3量线全部完成（v3.6）**：#103-#105，8条量线 + 37 个测试
+- **数据采集层与分析层入 zijian（v3.6）**：#89-#108
+- **全市场日线模式支持（v3.6）**：#110-#115
+- **daily-fetch.yml 上线并自动运行（v3.6）**：#107 起
 
 进行中：
-- **数据管道问题排查（v3.5）**：东财 100% 挂（IP 段限制？）；record_truth 首次跑"无新增账目"（待排查原因）
+- **日线首次拉取验证（v3.6）**：等 2026-10-08 A 股开盘后 cron（北京时间 15:30）自动触发，验证日线拉取链路
 
 ### 7.2 建议优先事项
 
@@ -374,13 +401,12 @@ aaa 数据层四件套源自 chenguanqiao2006/one：fetch_quotes.py、record_tru
 
 ### 7.3 未完成项待办
 
-A. 数据管道问题（v3.5 新增，最高优先）
-- **东财接口在 GitHub Actions IP 段上可能被限制**：100%失败（RemoteDisconnected）；腾讯/新浪兜底生效但腾讯1分钟仅当日（242根），东财1分钟才返回多日（480根）；需确定多日1分钟数据来源方案（替代方案：每天跑一次累积 / akshare / baostock / tushare）
-- **record_truth 首次跑"本日无新增账目"**：需排查——①aaa 仓库 data/analysis/truth_ledger/ 下是否有账本文件；②1分钟数据格式是否与 record_truth 预期匹配；③账本判定结果是否正确
+A. ~~数据管道问题~~（v3.6 已解决）
+- 数据采集层已入 zijian，四源降级链正常
+- 日线拉取待 2026-10-08 验证
 
 B. 代码实现待办
 - 批次1（7张卡）、批次2（2张王牌柱）已完成
-- 批次3（8条量线绘制规则）代码实现——下一步
 - 批次4-7代码实现
 - 批次8（真假量柱测谎）代码实现——从 aaa/one 迁移
 
@@ -584,12 +610,17 @@ I. one 库遗留待办（v3.4）
 │   └── spec_batch7_twelve_words.md
 ├── src/                       （已同步GitHub）
 │   ├── __init__.py
-│   ├── signals/（base.py + 9张信号卡）
-│   ├── global_rules/（price_position.py）
-│   └── utils/（data_loader.py）
-├── tests/                     （94测试通过，已同步GitHub）
+│   ├── signals/         （9张信号卡：base.py + 批次1七张 + 批次2两张）
+│   ├── price_lines/     （8条量线：base.py + 峰顶/谷底/平衡/斜衡/峰谷/精准/灯塔/通道）
+│   ├── global_rules/    （price_position.py 位置判定）
+│   ├── utils/           （data_loader.py）
+│   ├── data/            （数据采集层：paths/fetch_quotes/validator/status/logger/watchlist/run_pipeline）
+│   └── analysis/        （record_truth.py 真假量柱账本 v3.5）
+├── tests/                     （421测试通过，已同步GitHub）
 ├── requirements.txt
-└── .github/workflows/test.yml
+└── .github/workflows/
+│   ├── test.yml
+│   └── daily-fetch.yml   （数据管道自动运行）
 
 待建：
 - src/signals/ 下批次3-7对应模块
@@ -612,6 +643,7 @@ I. one 库遗留待办（v3.4）
 | v3.3 | 2026-10-06 | 外置大脑四件套上线GitHub。9章新增决策53。 |
 | v3.4 | 2026-10-06 | one库分析完成+项目演化史入档：①两库在线深读（只读未落盘），输出报告；②2.4新增"项目演化史"；③6.6新增"one库分析成果"；④9章新增决策54-56；⑤7.3新增H项；⑥分析报告已保存飞书云盘 |
 | v3.5 | 2026-10-06 | **aaa 数据管道首次跑通**：①aaa 仓库 daily-quote.yml 手动触发成功（commit f942846）；②fetch_quotes.py：日线9/9、1分钟305/305（东财100%挂，腾讯/新浪兜底生效）；③scan_market.py：8/9扫描、1565信号、快照落盘；④recalibrate 跳过（非每月1日）；⑤**东财接口在 GitHub Actions IP 段上被限制（100%失败）**；⑥**record_truth 首次跑"本日无新增账目"待排查**；⑦9章新增决策57（数据管道首次跑通）、58（东财降级链生效）；7.3 新增 A 项（数据管道问题，最高优先） |
+| v3.6 | 2026-10-07 | **档案同步——追上 37 个 commit 的落后**：①批次3量线8条全部完成（#103-#105）；②数据采集层 paths/fetch_quotes/validator/status/logger/watchlist/run_pipeline 全部入仓（#89、#106-#108）；③分析层 record_truth v2.3→v3.5（#90-#102）；④全市场日线模式支持（#110-#115）；⑤daily-fetch.yml 上线并自动运行（#107 起）；⑥测试总数从 94 更新为 421 passed；⑦本档案落后 37 个 commit 的问题由本次更新解决 |
 
 ---
 
