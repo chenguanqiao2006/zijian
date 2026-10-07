@@ -21,7 +21,7 @@ src/data/status.py — 拉取状态跟踪器
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -30,9 +30,12 @@ from .paths import BASE, validate_code
 
 STATUS_FILE = BASE / "data" / "fetch_status.json"
 
+# 中国标准时间（UTC+8）
+CST = timezone(timedelta(hours=8))
+
 
 def _now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_status() -> Dict[str, Any]:
@@ -64,7 +67,8 @@ def update_stock_status_batch(updates: List[Dict[str, Any]]) -> None:
     if not updates:
         return
     status = load_status()
-    status["last_run"] = _now_str()
+    now = _now_str()
+    status["last_run"] = now
 
     for u in updates:
         code = validate_code(u["code"])
@@ -74,7 +78,7 @@ def update_stock_status_batch(updates: List[Dict[str, Any]]) -> None:
             status["stocks"][code] = {}
 
         status["stocks"][code][data_type] = {
-            "last_fetch": _now_str(),
+            "last_fetch": now,
             "source": u.get("source"),
             "bar_count": u.get("bar_count", 0),
             "trading_days": u.get("trading_days"),
