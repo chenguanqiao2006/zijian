@@ -29,12 +29,15 @@ import logging
 import os
 import re
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from .paths import BASE
 
+
+# 中国标准时间（UTC+8）
+CST = timezone(timedelta(hours=8))
 
 # 日志目录
 LOG_DIR = BASE / "data" / "logs"
@@ -80,7 +83,7 @@ class FetchLogger:
         self._logger.addHandler(console)
 
         # 文件 handler（DEBUG 及以上，按日期命名）
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(CST).strftime("%Y-%m-%d")
         log_file = LOG_DIR / f"{LOG_PREFIX}{today}.log"
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
@@ -93,14 +96,15 @@ class FetchLogger:
     def _cleanup_old_logs(self):
         """清理超过保留天数的旧日志文件。"""
         try:
-            cutoff = datetime.now() - timedelta(days=RETENTION_DAYS)
+            cutoff = datetime.now(CST) - timedelta(days=RETENTION_DAYS)
             for f in LOG_DIR.glob(f"{LOG_PREFIX}*.log"):
                 # 从文件名提取日期
                 m = re.search(r"(\d{4}-\d{2}-\d{2})", f.name)
                 if not m:
                     continue
                 try:
-                    file_date = datetime.strptime(m.group(1), "%Y-%m-%d")
+                    file_date = datetime.strptime(
+                        m.group(1), "%Y-%m-%d").replace(tzinfo=CST)
                     if file_date < cutoff:
                         f.unlink()
                 except ValueError:
