@@ -56,7 +56,7 @@ UA = {
 TIMEOUT = 15
 ALL_MARKET_TIMEOUT = 8       # 全市场模式超时（秒），快速失败降级
 MAX_WORKERS = 5
-ALL_MARKET_WORKERS = 20      # 全市场模式并发
+ALL_MARKET_WORKERS = 10      # 全市场模式并发（太高会触发数据源限流）
 
 # 自选池（已迁移到 Watchlist，保留此常量仅作默认初始化参考）
 # 实际股票池请使用: python -m data.watchlist list/add/remove
@@ -490,8 +490,10 @@ def _validate_and_record(code, data_type, source, bars):
 
 
 def daily_worker(code, datalen, full=False, all_market=False):
-    if not all_market:
-        time.sleep(0.15)  # 轻微限速（全市场模式跳过，靠并发控制）
+    if all_market:
+        time.sleep(0.05)  # 全市场模式轻量限速，避免触发数据源限流
+    else:
+        time.sleep(0.15)  # 普通模式轻微限速
     if all_market:
         src, bars = fetch_daily(code, datalen, timeout=ALL_MARKET_TIMEOUT,
                                 sources=ALL_MARKET_SOURCES)
@@ -618,9 +620,22 @@ def run_fetch(args):
         if all_market_mode:
             workers = ALL_MARKET_WORKERS
             log.info(f'全市场模式: {len(codes)} 只，并发{workers}，超时{ALL_MARKET_TIMEOUT}s，东财优先')
+            # 第一轮：东财优先
             ok, failed, sources = run_threaded(
                 codes, lambda c: daily_worker(c, args.days, args.full, all_market=True),
                 max_workers=workers, progress_every=500)
+            # 第二轮重试：失败的股票换源顺序（腾讯优先），等待15秒避限流
+            if failed:
+                log.info(f'第一轮失败 {len(failed)} 只，等待15秒后重试（腾讯优先）...')
+                time.sleep(15)
+                retry_ok, retry_failed, retry_sources = run_threaded(
+                    failed, lambda c: daily_worker(c, args.days, args.full, all_market=False),
+                    max_workers=max(workers // 2, 3), progress_every=200)
+                ok += retry_ok
+                failed = retry_failed
+                for k, v in retry_sources.items():
+                    sources[k] = sources.get(k, 0) + v
+                log.info(f'重试完成: 额外成功 {retry_ok} 只，仍失败 {len(failed)} 只')
         else:
             ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
         log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
