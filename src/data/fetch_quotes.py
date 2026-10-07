@@ -180,6 +180,93 @@ ALL_MARKET_SOURCES = [
 
 
 # ---------------------------------------------------------------------------
+# baostock 数据源（免费、无需注册、无限流，全市场首选）
+# 注意：baostock 不是线程安全的，必须单线程使用，多线程会导致连接混乱
+# ---------------------------------------------------------------------------
+
+def daily_from_baostock(code, datalen=120, timeout=None):
+    """baostock 前复权日线（单只，需在单线程环境调用）。"""
+    try:
+        import baostock as bs
+    except ImportError:
+        return []
+    bs_code = code[:2] + '.' + code[2:]  # sh600519 -> sh.600519
+    lg = bs.login()
+    if lg.error_code != '0':
+        return []
+    try:
+        rs = bs.query_history_k_data_plus(
+            bs_code, 'date,open,high,low,close,volume',
+            start_date='2020-01-01', end_date='2050-01-01',
+            frequency='d', adjustflag='2')  # 2=前复权
+        rows = []
+        while rs.error_code == '0' and rs.next():
+            rows.append(rs.get_row_data())
+    finally:
+        bs.logout()
+    if not rows:
+        return []
+    out = []
+    for r in rows[-datalen:]:
+        out.append(_bar(r[0], float(r[1]), float(r[2]),
+                        float(r[3]), float(r[4]), float(r[5])))
+    return out
+
+
+def fetch_daily_baostock_batch(codes, datalen=120):
+    """baostock 单线程批量拉取（全市场模式首选）。
+
+    baostock 无限流但非线程安全，单线程批量拉取约 130ms/只，
+    全市场4606只约10分钟，成功率接近100%。
+
+    Returns:
+        (success_dict, failed_list): success_dict={code: bars}, failed_list=[code,...]
+    """
+    try:
+        import baostock as bs
+    except ImportError:
+        log.error('baostock 未安装，全市场批量拉取不可用')
+        return {}, list(codes)
+
+    lg = bs.login()
+    if lg.error_code != '0':
+        log.error(f'baostock 登录失败: {lg.error_msg}')
+        return {}, list(codes)
+
+    success = {}
+    failed = []
+    total = len(codes)
+    try:
+        for i, code in enumerate(codes):
+            bs_code = code[:2] + '.' + code[2:]
+            try:
+                rs = bs.query_history_k_data_plus(
+                    bs_code, 'date,open,high,low,close,volume',
+                    start_date='2020-01-01', end_date='2050-01-01',
+                    frequency='d', adjustflag='2')
+                rows = []
+                while rs.error_code == '0' and rs.next():
+                    rows.append(rs.get_row_data())
+                if rows:
+                    bars = []
+                    for r in rows[-datalen:]:
+                        bars.append(_bar(r[0], float(r[1]), float(r[2]),
+                                        float(r[3]), float(r[4]), float(r[5])))
+                    success[code] = bars
+                else:
+                    failed.append(code)
+            except Exception:
+                failed.append(code)
+            if (i + 1) % 500 == 0:
+                log.info(f'baostock 批量进度: {i+1}/{total}（成功{len(success)}，失败{len(failed)}）')
+    finally:
+        bs.logout()
+
+    log.info(f'baostock 批量完成: 成功{len(success)}，失败{len(failed)}')
+    return success, failed
+
+
+# ---------------------------------------------------------------------------
 # 1分钟数据源
 # ---------------------------------------------------------------------------
 
@@ -489,18 +576,8 @@ def _validate_and_record(code, data_type, source, bars):
         return True, [], {"bar_count": len(bars)}
 
 
-def daily_worker(code, datalen, full=False, all_market=False):
-    if all_market:
-        time.sleep(0.05)  # 全市场模式轻量限速，避免触发数据源限流
-    else:
-        time.sleep(0.15)  # 普通模式轻微限速
-    if all_market:
-        src, bars = fetch_daily(code, datalen, timeout=ALL_MARKET_TIMEOUT,
-                                sources=ALL_MARKET_SOURCES)
-    else:
-        src, bars = fetch_daily(code, datalen)
-    if not bars:
-        return False, None
+def save_daily_bars(code, bars, full=False, source='baostock'):
+    """保存日线数据到文件并校验更新状态（供批量拉取后复用）。"""
     path = kline_path(code)
     if full:
         merged = sorted(bars, key=lambda b: b[0])
@@ -513,7 +590,23 @@ def daily_worker(code, datalen, full=False, all_market=False):
                 local = []
         merged = merge_bars(local, bars)
     save_json(path, merged)
-    _validate_and_record(code, "daily", src, merged)
+    _validate_and_record(code, "daily", source, merged)
+    return True
+
+
+def daily_worker(code, datalen, full=False, all_market=False):
+    if all_market:
+        time.sleep(0.05)  # 全市场模式轻量限速，避免触发数据源限流
+    else:
+        time.sleep(0.15)  # 普通模式轻微限速
+    if all_market:
+        src, bars = fetch_daily(code, datalen, timeout=ALL_MARKET_TIMEOUT,
+                                sources=ALL_MARKET_SOURCES)
+    else:
+        src, bars = fetch_daily(code, datalen)
+    if not bars:
+        return False, None
+    save_daily_bars(code, bars, full, src)
     return True, src
 
 
@@ -618,24 +711,27 @@ def run_fetch(args):
     else:
         log.info(f'日线模式: {"全量重建" if args.full else "增量合并"}（{args.days} 根）')
         if all_market_mode:
-            workers = ALL_MARKET_WORKERS
-            log.info(f'全市场模式: {len(codes)} 只，并发{workers}，超时{ALL_MARKET_TIMEOUT}s，东财优先')
-            # 第一轮：东财优先
-            ok, failed, sources = run_threaded(
-                codes, lambda c: daily_worker(c, args.days, args.full, all_market=True),
-                max_workers=workers, progress_every=500)
-            # 第二轮重试：失败的股票换源顺序（腾讯优先），等待15秒避限流
+            log.info(f'全市场模式: {len(codes)} 只，主源baostock（单线程批量，无限流），失败补源腾讯/东财')
+            # 第一轮：baostock 单线程批量拉取（无限流，高成功率，约130ms/只）
+            bs_success, bs_failed = fetch_daily_baostock_batch(codes, args.days)
+            ok = 0
+            sources = {'baostock': len(bs_success)}
+            for code, bars in bs_success.items():
+                save_daily_bars(code, bars, args.full, source='baostock')
+                ok += 1
+            failed = bs_failed
+            log.info(f'baostock 批量完成: 成功{ok}，失败{len(failed)}')
+            # 第二轮：baostock 失败的用多线程腾讯/东财补拉
             if failed:
-                log.info(f'第一轮失败 {len(failed)} 只，等待15秒后重试（腾讯优先）...')
-                time.sleep(15)
+                log.info(f'补拉 {len(failed)} 只（腾讯/东财，并发{ALL_MARKET_WORKERS}）...')
                 retry_ok, retry_failed, retry_sources = run_threaded(
-                    failed, lambda c: daily_worker(c, args.days, args.full, all_market=False),
-                    max_workers=max(workers // 2, 3), progress_every=200)
+                    failed, lambda c: daily_worker(c, args.days, args.full, all_market=True),
+                    max_workers=ALL_MARKET_WORKERS, progress_every=200)
                 ok += retry_ok
                 failed = retry_failed
                 for k, v in retry_sources.items():
                     sources[k] = sources.get(k, 0) + v
-                log.info(f'重试完成: 额外成功 {retry_ok} 只，仍失败 {len(failed)} 只')
+                log.info(f'补拉完成: 额外成功{retry_ok}，仍失败{len(failed)}')
         else:
             ok, failed, sources = run_threaded(codes, lambda c: daily_worker(c, args.days, args.full))
         log.info(f'日线完成: 成功 {ok}/{len(codes)}，失败 {len(failed)}')
