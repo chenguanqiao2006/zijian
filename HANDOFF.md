@@ -10,14 +10,14 @@
 ## 当前状态
 - 项目：量学解盘引擎（zijian 仓库）
 - 阶段：档案 v3.6 定稿，等 10-08 日线首次验证
-- 新任"丞相"（可审核模型）已接手并输出理解确认
+- 已确认多个 AI 可读 raw 链接：DeepSeek 手机版、千问 app
 
 ## 上次会话做了什么
 - 新任"丞相"接手：读 GitHub 上 HANDOFF.md 失败，改由用户粘贴 SOUL / PROJECT_MEMORY / HANDOFF 完成交接
 - 输出理解确认：项目边界、v3.6 坐标、最高优先（10-08 验证）、丞相职责边界、协作约束
 - 指出时序：档案记 10-07、验证在 10-08，当前处于"等 cron"静默窗口
 - 整理未决项清单供负责人调度
-- 验证 raw 链接可读性：对话型 AI 能读 raw.githubusercontent.com 纯文本链接
+- 验证 raw 链接可读性：DeepSeek 手机版、千问 app 均能读 raw.githubusercontent.com 纯文本链接
 - 发现 CDN 缓存延迟：raw 链接更新后需加 ?v= 参数绕过缓存，否则读到旧版
 
 ## 下一步要做什么
@@ -31,14 +31,18 @@
 - 所有指令必须单代码块、一键复制，禁止嵌套
 - Agent 默认不 commit、不 push，除非任务明确说明
 - 每次 Agent 任务只改指定文件，不动其他
-- 丞相=可审核模型，不可联网；不得提供需联网核实的原始信息，一律标【未能核实】
+- 丞相角色 = 顾问、参谋长、把关人（不是执行者）
+- 不同 AI 的联网能力不同：
+  · DeepSeek 手机版：能读 raw 链接
+  · 千问 app：能读 raw 链接
+  · MonkeyCode 等 Agent：能 git clone 读仓库
+  · 若某 AI 说"读不到"，改用手动粘贴兜底
+- 无论哪个 AI，都不得提供需联网核实的原始信息（ISBN/页码/原文），一律标【未能核实】
 - 真相源是 specs/ 目录文件，不是任何模型的记忆
 - 线索分级：①②可入规格，③④仅作档案线索
-- 对话型 AI（如网页版大模型）无直接访问 github.com 网页能力，开新窗口时优先发 raw 链接，读不到再手动粘贴
 - raw 链接格式（加 ?v= 日期 绕过 CDN 缓存）：
   https://raw.githubusercontent.com/chenguanqiao2006/zijian/refs/heads/main/HANDOFF.md?v=20261007
 - 国内访问 raw.githubusercontent.com 可能不稳定，如失败改用粘贴
-- Agent（如 MonkeyCode、豆包工作模式）有 git clone 能力，可直接读仓库
 
 ## 未解决问题
 - GLOBAL/MEMORY/ONBOARD 三件套落后于代码
