@@ -366,40 +366,58 @@ def _looks_like_time(x) -> bool:
     return False
 
 
+def _bar_ok(d):
+    """v3.6.1 兜底：OHLCV 任一为 NaN/无穷大，或收盘价<=0 时丢弃该根 K 线。
+    源数据里的 "NaN" 字面量 / json NaN 会被 float() 悄悄变成 nan（不抛异常），
+    若不拦截会一路漏到 compute_volume_profile 导致 int(NaN) 崩溃。
+    注意：volume==0 是盘中真实零成交分钟，属于合法数据，不能据此丢弃。"""
+    try:
+        for k in ('open', 'high', 'low', 'close', 'volume'):
+            if not math.isfinite(d[k]):
+                return None
+        if d['close'] <= 0:
+            return None
+        if d['high'] < d['low']:
+            return None
+    except (KeyError, TypeError):
+        return None
+    return d
+
+
 def normalize_bar(item):
     try:
         if isinstance(item, dict):
             g = lambda *ks: next((item[k] for k in ks if item.get(k) is not None), None)
-            return {
+            return _bar_ok({
                 'time':   g('time', 't', 'datetime', 'dt', 'date'),
                 'open':   float(g('open', 'o', 0)),
                 'high':   float(g('high', 'h', 0)),
                 'low':    float(g('low', 'l', 0)),
                 'close':  float(g('close', 'c', 0)),
                 'volume': float(g('volume', 'vol', 'v', 0)),
-            }
+            })
         if isinstance(item, str):
             parts = [p.strip() for p in item.split(',')]
             if len(parts) >= 6 and _looks_like_time(parts[0]):
-                return {
+                return _bar_ok({
                     'time':   parts[0],
                     'open':   float(parts[1]),
                     'high':   float(parts[2]),
                     'low':    float(parts[3]),
                     'close':  float(parts[4]),
                     'volume': float(parts[5]),
-                }
+                })
             return None
         if isinstance(item, (list, tuple)) and len(item) >= 6:
             if _looks_like_time(item[0]):
-                return {
+                return _bar_ok({
                     'time':   item[0],
                     'open':   float(item[1]),
                     'high':   float(item[2]),
                     'low':    float(item[3]),
                     'close':  float(item[4]),
                     'volume': float(item[5]),
-                }
+                })
             return None
     except (ValueError, TypeError):
         return None
